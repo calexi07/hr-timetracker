@@ -1,6 +1,9 @@
 'use client'
+import { useState } from 'react'
 import { formatHours, formatDate, formatTime, downloadCSV, cn } from '@/lib/utils'
-import { Download } from 'lucide-react'
+import { Download, MessageSquare, X, Save } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import toast from 'react-hot-toast'
 
 const NORMA_ZI = 8.25
 
@@ -13,31 +16,34 @@ function getStatus(hours: number): { label: string; color: string } {
 
 function formatDiff(hours: number): { text: string; color: string } {
   if (hours === 0) return { text: '—', color: 'text-slate-400' }
-
   const diff = hours - NORMA_ZI
   const totalMinute = Math.round(diff * 60)
-
   if (totalMinute === 0) return { text: '±0m', color: 'text-green-600' }
-
   const semn = totalMinute > 0 ? '+' : '-'
-  const absTotalMinute = Math.abs(totalMinute)
-  const h = Math.floor(absTotalMinute / 60)
-  const m = absTotalMinute % 60
-
+  const abs = Math.abs(totalMinute)
+  const h = Math.floor(abs / 60)
+  const m = abs % 60
   let text = semn
   if (h > 0) text += `${h}h `
   text += `${m}m`
-
-  return {
-    text,
-    color: totalMinute > 0 ? 'text-blue-600 font-semibold' : 'text-red-600 font-semibold'
-  }
+  return { text, color: totalMinute > 0 ? 'text-blue-600 font-semibold' : 'text-red-600 font-semibold' }
 }
 
-export default function TimesheetTable({ timesheets }: { timesheets: any[] }) {
+interface Props {
+  timesheets: any[]
+  readonly?: boolean
+}
+
+export default function TimesheetTable({ timesheets, readonly = false }: Props) {
+  const supabase = createClient()
+  const [rows, setRows] = useState(timesheets)
+  const [modal, setModal] = useState<{ open: boolean; row: any | null }>({ open: false, row: null })
+  const [observatie, setObservatie] = useState('')
+  const [saving, setSaving] = useState(false)
+
   const handleExport = () => {
     downloadCSV(
-      timesheets.map(t => {
+      rows.map(t => {
         const diff = Number(t.hours_worked) - NORMA_ZI
         const totalMinute = Math.round(diff * 60)
         return {
@@ -47,6 +53,7 @@ export default function TimesheetTable({ timesheets }: { timesheets: any[] }) {
           'Ore lucrate': t.hours_worked,
           'Diferenta (minute)': totalMinute >= 0 ? `+${totalMinute}m` : `${totalMinute}m`,
           'Status': getStatus(Number(t.hours_worked)).label,
+          'Observatii': t.observatii || '',
           'Departament': t.department,
           'Angajat': t.employee_name,
         }
@@ -55,7 +62,40 @@ export default function TimesheetTable({ timesheets }: { timesheets: any[] }) {
     )
   }
 
-  if (!timesheets.length) {
+  const openModal = (row: any) => {
+    setModal({ open: true, row })
+    setObservatie(row.observatii || '')
+  }
+
+  const closeModal = () => {
+    setModal({ open: false, row: null })
+    setObservatie('')
+  }
+
+  const handleSave = async () => {
+    if (!modal.row) return
+    setSaving(true)
+
+    const { error } = await supabase
+      .from('timesheets')
+      .update({ observatii: observatie.trim() || null })
+      .eq('id', modal.row.id)
+
+    if (error) {
+      toast.error('Eroare la salvare: ' + error.message)
+    } else {
+      toast.success('Observatie salvata')
+      setRows(prev => prev.map(r =>
+        r.id === modal.row.id
+          ? { ...r, observatii: observatie.trim() || null }
+          : r
+      ))
+      closeModal()
+    }
+    setSaving(false)
+  }
+
+  if (!rows.length) {
     return (
       <div className="text-center py-12 text-slate-400">
         <p className="text-sm">Nicio inregistrare pentru perioada selectata</p>
@@ -63,8 +103,8 @@ export default function TimesheetTable({ timesheets }: { timesheets: any[] }) {
     )
   }
 
-  const totalOre = timesheets.reduce((s, r) => s + Number(r.hours_worked), 0)
-  const totalNorma = timesheets.length * NORMA_ZI
+  const totalOre = rows.reduce((s, r) => s + Number(r.hours_worked), 0)
+  const totalNorma = rows.length * NORMA_ZI
   const totalDiffMinute = Math.round((totalOre - totalNorma) * 60)
 
   const formatTotalDiff = (minute: number) => {
@@ -78,12 +118,58 @@ export default function TimesheetTable({ timesheets }: { timesheets: any[] }) {
 
   return (
     <div>
+      {/* Modal observatii */}
+      {modal.open && modal.row && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeModal} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 z-10">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Observatie</h3>
+                <p className="text-sm text-slate-400 mt-0.5">{formatDate(modal.row.date)} — {modal.row.employee_name}</p>
+              </div>
+              <button onClick={closeModal}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 rounded-xl p-3 mb-4 text-xs text-slate-500 flex gap-4">
+              <span>Intrare: <strong className="text-slate-700">{formatTime(modal.row.check_in)}</strong></span>
+              <span>Iesire: <strong className="text-slate-700">{formatTime(modal.row.check_out)}</strong></span>
+              <span>Ore: <strong className="text-slate-700">{formatHours(Number(modal.row.hours_worked))}</strong></span>
+            </div>
+
+            <textarea
+              value={observatie}
+              onChange={e => setObservatie(e.target.value)}
+              placeholder="Adauga o observatie pentru aceasta zi... (ex: deplasare, concediu medical, training)"
+              rows={4}
+              disabled={readonly}
+              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none disabled:bg-slate-50 disabled:text-slate-500"
+            />
+
+            <div className="flex gap-3 mt-4">
+              {!readonly && (
+                <button onClick={handleSave} disabled={saving} className="btn-primary flex-1 justify-center">
+                  {saving ? 'Se salveaza...' : <><Save size={15} />Salveaza</>}
+                </button>
+              )}
+              <button onClick={closeModal} className="btn-secondary flex-1 justify-center">
+                {readonly ? 'Inchide' : 'Anuleaza'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-end mb-3">
         <button onClick={handleExport} className="btn-secondary text-xs">
           <Download size={14} />
           Exporta CSV
         </button>
       </div>
+
       <div className="overflow-x-auto rounded-xl border border-slate-100">
         <table className="w-full text-sm">
           <thead>
@@ -94,10 +180,12 @@ export default function TimesheetTable({ timesheets }: { timesheets: any[] }) {
               <th className="text-right px-4 py-3 font-medium text-slate-500">Ore lucrate</th>
               <th className="text-right px-4 py-3 font-medium text-slate-500">Diferenta</th>
               <th className="text-left px-4 py-3 font-medium text-slate-500">Status</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-500">Observatii</th>
+              <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
-            {timesheets.map((t, i) => {
+            {rows.map((t, i) => {
               const { label, color } = getStatus(Number(t.hours_worked))
               const { text: diffText, color: diffColor } = formatDiff(Number(t.hours_worked))
               return (
@@ -109,6 +197,29 @@ export default function TimesheetTable({ timesheets }: { timesheets: any[] }) {
                   <td className={cn('px-4 py-3 text-right', diffColor)}>{diffText}</td>
                   <td className="px-4 py-3">
                     <span className={cn('badge', color)}>{label}</span>
+                  </td>
+                  <td className="px-4 py-3 max-w-xs">
+                    {t.observatii ? (
+                      <span className="text-xs text-slate-600 truncate block max-w-[180px]" title={t.observatii}>
+                        {t.observatii}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-300">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => openModal(t)}
+                      className={cn(
+                        'p-1.5 rounded-lg transition-all',
+                        t.observatii
+                          ? 'text-blue-500 hover:text-blue-700 hover:bg-blue-50'
+                          : 'text-slate-300 hover:text-slate-500 hover:bg-slate-100'
+                      )}
+                      title={readonly ? 'Vezi observatie' : 'Adauga / editeaza observatie'}
+                    >
+                      <MessageSquare size={15} />
+                    </button>
                   </td>
                 </tr>
               )
@@ -140,6 +251,7 @@ export default function TimesheetTable({ timesheets }: { timesheets: any[] }) {
                     : `De recuperat ${formatTotalDiff(totalDiffMinute).replace('-', '')}`}
                 </span>
               </td>
+              <td colSpan={2} />
             </tr>
           </tfoot>
         </table>
