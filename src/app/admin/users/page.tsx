@@ -12,6 +12,9 @@ const ROLURI = [
   { value: 'admin', label: 'Administrator' },
 ]
 
+// Rolurile care pot fi asignate unui manager
+const ROLURI_CU_MANAGER = ['employee', 'admin', 'director']
+
 export default function UsersPage() {
   const [users, setUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -55,7 +58,7 @@ export default function UsersPage() {
     if (error) {
       toast.error('Eroare: ' + error.message)
     } else {
-      toast.success('Angajat actualizat')
+      toast.success('Utilizator actualizat')
       setUsers(prev => prev.map(u =>
         u.id === user.id
           ? { ...u, name: edit.name, role: edit.role, employee_id: edit.employee_id ? parseInt(edit.employee_id) : null, manager_id: edit.manager_id || null }
@@ -183,7 +186,7 @@ export default function UsersPage() {
               <input type="number" placeholder="ex: 21" value={newUser.employee_id}
                 onChange={e => setNewUser({ ...newUser, employee_id: e.target.value })} className="input" />
             </div>
-            {newUser.role === 'employee' && (
+            {ROLURI_CU_MANAGER.includes(newUser.role) && (
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">Manager</label>
                 <select value={newUser.manager_id} onChange={e => setNewUser({ ...newUser, manager_id: e.target.value })} className="input">
@@ -218,6 +221,7 @@ export default function UsersPage() {
             {users.map(user => {
               const edit = edits[user.id]
               const currentRole = edit?.role ?? user.role
+              const showManagerField = ROLURI_CU_MANAGER.includes(currentRole)
               return (
                 <tr key={user.id} className="border-b border-slate-50 hover:bg-slate-50">
                   <td className="px-4 py-3">
@@ -247,13 +251,15 @@ export default function UsersPage() {
                       className="input py-1.5 w-24" />
                   </td>
                   <td className="px-4 py-3">
-                    {currentRole === 'employee' ? (
+                    {showManagerField ? (
                       <select
                         value={edit?.manager_id ?? String(user.manager_id || '')}
                         onChange={e => setEdit(user.id, 'manager_id', e.target.value, user)}
                         className="input py-1.5 w-40">
                         <option value="">— Fara —</option>
-                        {managers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        {managers
+                          .filter(m => m.id !== user.id)
+                          .map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                       </select>
                     ) : (
                       <span className="text-slate-300 text-xs">—</span>
