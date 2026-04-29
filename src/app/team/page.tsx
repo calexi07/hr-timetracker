@@ -40,7 +40,6 @@ export default function TeamPage() {
 
       setCurrentUser(u)
 
-      // Director vede toti angajatii, managerul vede doar echipa lui
       let query = supabase
         .from('app_users')
         .select('*')
@@ -58,23 +57,23 @@ export default function TeamPage() {
     init()
   }, [])
 
-  const handleSelectMember = async (member: any) => {
-    setSelected(member)
-    setLoadingTs(true)
-    await loadTimesheets(member.employee_id, from, to)
-    setLoadingTs(false)
-  }
-
   const loadTimesheets = async (employeeId: number, f: string, t: string) => {
     if (!employeeId) { setTimesheets([]); return }
     const { data } = await supabase
       .from('timesheets')
       .select('*')
-      .eq('employee_id', employeeId)
+      .eq('employee_id', Number(employeeId))
       .gte('date', f)
       .lte('date', t)
       .order('date', { ascending: false })
     setTimesheets(data || [])
+  }
+
+  const handleSelectMember = async (member: any) => {
+    setSelected(member)
+    setLoadingTs(true)
+    await loadTimesheets(Number(member.employee_id), from, to)
+    setLoadingTs(false)
   }
 
   const handleFilter = async (f: string, t: string) => {
@@ -82,7 +81,7 @@ export default function TeamPage() {
     setTo(t)
     if (selected?.employee_id) {
       setLoadingTs(true)
-      await loadTimesheets(selected.employee_id, f, t)
+      await loadTimesheets(Number(selected.employee_id), f, t)
       setLoadingTs(false)
     }
   }
@@ -90,6 +89,15 @@ export default function TeamPage() {
   const totalHours = timesheets.reduce((s, r) => s + Number(r.hours_worked), 0)
   const totalNorma = timesheets.length * NORMA_ZI
   const totalDiffMin = Math.round((totalHours - totalNorma) * 60)
+
+  const formatBilant = (minute: number) => {
+    const abs = Math.abs(minute)
+    const h = Math.floor(abs / 60)
+    const m = abs % 60
+    const semn = minute >= 0 ? '+' : '-'
+    if (abs === 0) return '±0m'
+    return `${semn}${h > 0 ? h + 'h ' : ''}${m}m`
+  }
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -219,14 +227,7 @@ export default function TeamPage() {
                         : totalDiffMin > 0 ? 'text-blue-700'
                         : 'text-red-700'
                     )}>
-                      {(() => {
-                        const abs = Math.abs(totalDiffMin)
-                        const h = Math.floor(abs / 60)
-                        const m = abs % 60
-                        const semn = totalDiffMin >= 0 ? '+' : '-'
-                        if (abs === 0) return '±0m'
-                        return `${semn}${h > 0 ? h + 'h ' : ''}${m}m`
-                      })()}
+                      {formatBilant(totalDiffMin)}
                     </p>
                     <p className="text-xs text-slate-400 mt-0.5">
                       {totalDiffMin === 0 ? 'Echilibrat' : totalDiffMin > 0 ? 'Avans' : 'De recuperat'}
