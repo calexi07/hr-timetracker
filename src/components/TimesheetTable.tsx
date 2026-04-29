@@ -1,11 +1,12 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { formatHours, formatDate, formatTime, downloadCSV, cn } from '@/lib/utils'
 import { Download, MessageSquare, X, Save } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import toast from 'react-hot-toast'
-import { eachDayOfInterval, parseISO, format, isWeekend, isSaturday, isSunday } from 'date-fns'
+import { eachDayOfInterval, parseISO, format, isWeekend } from 'date-fns'
 import { ro } from 'date-fns/locale'
+import { useUser } from '@/components/UserContext'
 
 const NORMA_ZI = 8.25
 
@@ -36,25 +37,48 @@ interface Props {
   readonly?: boolean
   from?: string
   to?: string
+  employeeId?: number
 }
 
-export default function TimesheetTable({ timesheets, readonly = false, from, to }: Props) {
+export default function TimesheetTable({ timesheets, readonly = false, from, to, employeeId }: Props) {
   const supabase = createClient()
+  const user = useUser()
   const [rows, setRows] = useState(timesheets)
-  const [modal, setModal] = useState<{ open: boolean; row: any | null }>({ open: false, row: null })
-  const [observatie, setObservatie] = useState('')
+  const [observatiiZile, setObservatiiZile] = useState<Record<string, string>>({})
+  const [modal, setModal] = useState<{ open: boolean; date: string; pontaj: any | null; observatie: string }>({
+    open: false, date: '', pontaj: null, observatie: ''
+  })
   const [saving, setSaving] = useState(false)
 
-  // Genereaza toate zilele din interval
+  const empId = employeeId || user?.employee_id
+
+  // Incarca observatiile pentru zilele fara pontaj
+  useEffect(() => {
+    if (!empId || !from || !to) return
+    const load = async () => {
+      const { data } = await supabase
+        .from('observatii_zile')
+        .select('date, observatie')
+        .eq('employee_id', empId)
+        .gte('date', from)
+        .lte('date', to)
+      if (data) {
+        const map: Record<string, string> = {}
+        data.forEach(d => { map[d.date] = d.observatie })
+        setObservatiiZile(map)
+      }
+    }
+    load()
+  }, [empId, from, to])
+
+  // Genereaza toate zilele
   const allDays = from && to ? eachDayOfInterval({
     start: parseISO(from),
     end: parseISO(to)
   }).reverse() : null
 
-  // Map pontaj dupa data
   const pontajMap = new Map(rows.map(r => [r.date, r]))
 
-  // Construieste randurile finale
   const tableRows = allDays ? allDays.map(day => {
     const dateStr = format(day, 'yyyy-MM-dd')
     const pontaj = pontajMap.get(dateStr)
@@ -69,61 +93,82 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to 
     ziSaptamana: format(parseISO(r.date), 'EEEE', { locale: ro })
   }))
 
-  const handleExport = () => {
-    downloadCSV(
-      tableRows.map(({ date, pontaj, weekend, ziSaptamana }) => ({
-        'Data': date,
-        'Zi': ziSaptamana,
-        'Tip zi': weekend ? 'Weekend' : pontaj ? 'Zi lucratoare' : 'Absenta/WFH',
-        'Intrare': pontaj?.check_in || '—',
-        'Iesire': pontaj?.check_out || '—',
-        'Ore lucrate': pontaj?.hours_worked || 0,
-        'Diferenta': pontaj ? (() => {
-          const diff = Number(pontaj.hours_worked) - NORMA_ZI
-          const min = Math.round(diff * 60)
-          return min >= 0 ? `+${min}m` : `${min}m`
-        })() : '—',
-        'Status': weekend ? 'Weekend' : pontaj ? getStatus(Number(pontaj.hours_worked)).label : 'Lipsa date',
-        'Observatii': pontaj?.observatii || '',
-      })),
-      `pontaj-${new Date().toISOString().split('T')[0]}.csv`
-    )
-  }
-
-  const openModal = (row: any) => {
-    setModal({ open: true, row })
-    setObservatie(row.observatii || '')
+  const openModal = (date: string, pontaj: any | null) => {
+    const obsExistenta = pontaj?.observatii || observatiiZile[date] || ''
+    setModal({ open: true, date, pontaj, observatie: obsExistenta })
   }
 
   const closeModal = () => {
-    setModal({ open: false, row: null })
-    setObservatie('')
+    setModal({ open: false, date: '', pontaj: null, observatie: '' })
   }
 
   const handleSave = async () => {
-    if (!modal.row) return
+    if (!modal.date) return
     setSaving(true)
 
-    const { error } = await supabase
-      .from('timesheets')
-      .update({ observatii: observatie.trim() || null })
-      .eq('id', modal.row.id)
+    if (modal.pontaj) {
+      // Salveaza in timesheets
+      const { error } = await supabase
+        .from('timesheets')
+        .update({ observatii: modal.observatie.trim() || null })
+        .eq('id', modal.pontaj.id)
 
-    if (error) {
-      toast.error('Eroare la salvare: ' + error.message)
-    } else {
-      toast.success('Observatie salvata')
+      if (error) {
+        toast.error('Eroare: ' + error.message)
+        setSaving(false)
+        return
+      }
+
       setRows(prev => prev.map(r =>
-        r.id === modal.row.id
-          ? { ...r, observatii: observatie.trim() || null }
+        r.id === modal.pontaj.id
+          ? { ...r, observatii: modal.observatie.trim() || null }
           : r
       ))
-      closeModal()
+    } else {
+      // Salveaza in observatii_zile
+      if (!empId) {
+        toast.error('ID angajat lipsa')
+        setSaving(false)
+        return
+      }
+
+      if (modal.observatie.trim()) {
+        const { error } = await supabase
+          .from('observatii_zile')
+          .upsert({
+            employee_id: empId,
+            date: modal.date,
+            observatie: modal.observatie.trim()
+          }, { onConflict: 'employee_id,date' })
+
+        if (error) {
+          toast.error('Eroare: ' + error.message)
+          setSaving(false)
+          return
+        }
+
+        setObservatiiZile(prev => ({ ...prev, [modal.date]: modal.observatie.trim() }))
+      } else {
+        // Sterge daca e goala
+        await supabase
+          .from('observatii_zile')
+          .delete()
+          .eq('employee_id', empId)
+          .eq('date', modal.date)
+
+        setObservatiiZile(prev => {
+          const next = { ...prev }
+          delete next[modal.date]
+          return next
+        })
+      }
     }
+
+    toast.success('Observatie salvata')
+    closeModal()
     setSaving(false)
   }
 
-  // Calculeaza totalurile doar din zilele cu pontaj (nu weekend)
   const totalOre = rows.reduce((s, r) => s + Number(r.hours_worked), 0)
   const totalNorma = rows.length * NORMA_ZI
   const totalDiffMinute = Math.round((totalOre - totalNorma) * 60)
@@ -137,19 +182,39 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to 
     return `${semn}${h > 0 ? h + 'h ' : ''}${m}m`
   }
 
+  const handleExport = () => {
+    downloadCSV(
+      tableRows
+        .filter(r => !r.weekend)
+        .map(({ date, pontaj, ziSaptamana }) => {
+          const obs = pontaj?.observatii || observatiiZile[date] || ''
+          const diff = pontaj ? Math.round((Number(pontaj.hours_worked) - NORMA_ZI) * 60) : 0
+          return {
+            'Data': date,
+            'Zi': ziSaptamana,
+            'Intrare': pontaj?.check_in || '—',
+            'Iesire': pontaj?.check_out || '—',
+            'Ore lucrate': pontaj?.hours_worked || 0,
+            'Diferenta': pontaj ? (diff >= 0 ? `+${diff}m` : `${diff}m`) : '—',
+            'Status': pontaj ? getStatus(Number(pontaj.hours_worked)).label : 'Fara date',
+            'Observatii': obs,
+          }
+        }),
+      `pontaj-${new Date().toISOString().split('T')[0]}.csv`
+    )
+  }
+
   return (
     <div>
-      {/* Modal observatii */}
-      {modal.open && modal.row && (
+      {/* Modal */}
+      {modal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeModal} />
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 z-10">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">Observatie</h3>
-                <p className="text-sm text-slate-400 mt-0.5">
-                  {formatDate(modal.row.date)} — {modal.row.employee_name}
-                </p>
+                <p className="text-sm text-slate-400 mt-0.5">{formatDate(modal.date)}</p>
               </div>
               <button onClick={closeModal}
                 className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all">
@@ -157,16 +222,22 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to 
               </button>
             </div>
 
-            <div className="bg-slate-50 rounded-xl p-3 mb-4 text-xs text-slate-500 flex gap-4">
-              <span>Intrare: <strong className="text-slate-700">{formatTime(modal.row.check_in)}</strong></span>
-              <span>Iesire: <strong className="text-slate-700">{formatTime(modal.row.check_out)}</strong></span>
-              <span>Ore: <strong className="text-slate-700">{formatHours(Number(modal.row.hours_worked))}</strong></span>
-            </div>
+            {modal.pontaj ? (
+              <div className="bg-slate-50 rounded-xl p-3 mb-4 text-xs text-slate-500 flex gap-4">
+                <span>Intrare: <strong className="text-slate-700">{formatTime(modal.pontaj.check_in)}</strong></span>
+                <span>Iesire: <strong className="text-slate-700">{formatTime(modal.pontaj.check_out)}</strong></span>
+                <span>Ore: <strong className="text-slate-700">{formatHours(Number(modal.pontaj.hours_worked))}</strong></span>
+              </div>
+            ) : (
+              <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 mb-4 text-xs text-amber-700">
+                Zi fara pontaj la birou — adauga o explicatie (ex: WFH, concediu, deplasare, medical)
+              </div>
+            )}
 
             <textarea
-              value={observatie}
-              onChange={e => setObservatie(e.target.value)}
-              placeholder="Adauga o observatie... (ex: deplasare, concediu medical, training)"
+              value={modal.observatie}
+              onChange={e => setModal(prev => ({ ...prev, observatie: e.target.value }))}
+              placeholder="Ex: Lucrat de acasa (WFH), Concediu medical, Deplasare Cluj..."
               rows={4}
               disabled={readonly}
               className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none disabled:bg-slate-50 disabled:text-slate-500"
@@ -209,7 +280,7 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to 
             </tr>
           </thead>
           <tbody>
-            {tableRows.map(({ date, day, pontaj, weekend, ziSaptamana }, i) => {
+            {tableRows.map(({ date, pontaj, weekend, ziSaptamana }) => {
               if (weekend) {
                 return (
                   <tr key={date} className="border-b border-red-100 bg-red-50/60">
@@ -221,9 +292,12 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to 
                 )
               }
 
+              const obsZi = observatiiZile[date]
+              const obsText = pontaj?.observatii || obsZi || null
+
               if (!pontaj) {
                 return (
-                  <tr key={date} className="border-b border-slate-50 bg-slate-50/50">
+                  <tr key={date} className="border-b border-slate-50 bg-slate-50/50 hover:bg-slate-50 transition-colors">
                     <td className="px-4 py-2.5 font-medium text-slate-400">{formatDate(date)}</td>
                     <td className="px-4 py-2.5 text-slate-400 capitalize text-xs">{ziSaptamana}</td>
                     <td className="px-4 py-2.5 text-slate-300">—</td>
@@ -233,8 +307,31 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to 
                     <td className="px-4 py-2.5">
                       <span className="badge bg-slate-100 text-slate-400">Fara date</span>
                     </td>
-                    <td className="px-4 py-2.5 text-slate-300 text-xs">—</td>
-                    <td className="px-4 py-2.5" />
+                    <td className="px-4 py-2.5 max-w-xs">
+                      {obsText ? (
+                        <span className="text-xs text-slate-600 truncate block max-w-[180px]" title={obsText}>
+                          {obsText}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {!readonly && (
+                        <button
+                          onClick={() => openModal(date, null)}
+                          className={cn(
+                            'p-1.5 rounded-lg transition-all',
+                            obsText
+                              ? 'text-blue-500 hover:text-blue-700 hover:bg-blue-50'
+                              : 'text-slate-300 hover:text-slate-500 hover:bg-slate-100'
+                          )}
+                          title="Adauga observatie"
+                        >
+                          <MessageSquare size={15} />
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 )
               }
@@ -254,9 +351,9 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to 
                     <span className={cn('badge', color)}>{label}</span>
                   </td>
                   <td className="px-4 py-3 max-w-xs">
-                    {pontaj.observatii ? (
-                      <span className="text-xs text-slate-600 truncate block max-w-[180px]" title={pontaj.observatii}>
-                        {pontaj.observatii}
+                    {obsText ? (
+                      <span className="text-xs text-slate-600 truncate block max-w-[180px]" title={obsText}>
+                        {obsText}
                       </span>
                     ) : (
                       <span className="text-xs text-slate-300">—</span>
@@ -264,10 +361,10 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to 
                   </td>
                   <td className="px-4 py-3">
                     <button
-                      onClick={() => openModal(pontaj)}
+                      onClick={() => openModal(date, pontaj)}
                       className={cn(
                         'p-1.5 rounded-lg transition-all',
-                        pontaj.observatii
+                        obsText
                           ? 'text-blue-500 hover:text-blue-700 hover:bg-blue-50'
                           : 'text-slate-300 hover:text-slate-500 hover:bg-slate-100'
                       )}
