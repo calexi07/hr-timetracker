@@ -214,7 +214,7 @@ export default function DashboardPage() {
                 <h2 className="text-base font-semibold text-slate-900">Detalii pontaj</h2>
                 <span className="text-xs text-slate-400">{timesheets.length} inregistrari</span>
               </div>
-              <TimesheetTable timesheets={timesheets} />
+            <TimesheetTable timesheets={timesheets} from={from} to={to} />
             </div>
           </>
         )}
