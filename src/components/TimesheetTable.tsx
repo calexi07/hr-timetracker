@@ -11,10 +11,11 @@ import { useUser } from '@/components/UserContext'
 const NORMA_ZI = 8.25
 
 function getStatus(hours: number): { label: string; color: string } {
+  if (hours === 0) return { label: 'Fara date', color: 'bg-slate-100 text-slate-500' }
   const diff = hours - NORMA_ZI
-  if (hours === 0) return { label: 'Normal', color: 'bg-green-100 text-green-700' }
-  if (Math.abs(diff) <= 0.25) return { label: 'Normal', color: 'bg-green-100 text-green-700' }
-  if (diff > 0.25) return { label: 'Timp in plus', color: 'bg-blue-100 text-blue-700' }
+  const minute = Math.round(diff * 60)
+  if (minute === 0) return { label: 'Normal', color: 'bg-green-100 text-green-700' }
+  if (minute > 0) return { label: 'Timp in plus', color: 'bg-blue-100 text-blue-700' }
   return { label: 'Timp de recuperat', color: 'bg-amber-100 text-amber-700' }
 }
 
@@ -389,7 +390,7 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                   'badge',
                   totalDiffMinute === 0 ? 'bg-green-100 text-green-700'
                     : totalDiffMinute > 0 ? 'bg-blue-100 text-blue-700'
-                    : 'bg-red-100 text-red-700'
+                    : 'bg-amber-100 text-amber-700'
                 )}>
                   {totalDiffMinute === 0
                     ? 'Echilibrat'
