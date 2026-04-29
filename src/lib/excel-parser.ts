@@ -48,7 +48,7 @@ export function parseTimesheetExcel(buffer: ArrayBuffer): {
   }
 
   const timesheets: ParsedTimesheet[] = []
-  for (const [, dayRows] of grouped) {
+ for (const [, dayRows] of Array.from(grouped)) {
     dayRows.sort((a, b) => a.time.getTime() - b.time.getTime())
     const first = dayRows[0]
     const last = dayRows[dayRows.length - 1]
