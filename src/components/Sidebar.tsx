@@ -4,62 +4,66 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { LayoutDashboard, Clock, Users, Upload, LogOut, ChevronRight, Shield, FileText, UsersRound } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
+
+interface UserInfo {
+  name: string
+  email: string
+  role: string
+}
 
 export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
-  const [userName, setUserName] = useState('')
-  const [userEmail, setUserEmail] = useState('')
-  const [role, setRole] = useState('')
-  const [ready, setReady] = useState(false)
-  const attempts = useRef(0)
-
-  const loadUser = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return false
-
-    setUserEmail(user.email || '')
-
-    const { data, error } = await supabase
-      .from('app_users')
-      .select('name, role')
-      .eq('id', user.id)
-      .single()
-
-    if (data) {
-      setUserName(data.name || user.email || '')
-      setRole(data.role || '')
-      setReady(true)
-      return true
-    }
-    return false
-  }
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
 
   useEffect(() => {
-    const tryLoad = async () => {
-      const ok = await loadUser()
-      if (!ok && attempts.current < 5) {
-        attempts.current += 1
-        setTimeout(tryLoad, 800)
+    // Citeste din localStorage instant
+    const cached = localStorage.getItem('pontaj_user')
+    if (cached) {
+      try { setUserInfo(JSON.parse(cached)) } catch {}
+    }
+
+    // Apoi fetch din supabase si actualizeaza
+    const load = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data } = await supabase
+        .from('app_users')
+        .select('name, role')
+        .eq('id', user.id)
+        .single()
+
+      if (data) {
+        const info: UserInfo = {
+          name: data.name || user.email || '',
+          email: user.email || '',
+          role: data.role || ''
+        }
+        setUserInfo(info)
+        localStorage.setItem('pontaj_user', JSON.stringify(info))
       }
     }
-    tryLoad()
+    load()
   }, [])
 
   const handleLogout = async () => {
+    localStorage.removeItem('pontaj_user')
     await supabase.auth.signOut()
     router.push('/login')
   }
 
   const getRolLabel = () => {
-    if (role === 'admin') return 'Administrator'
-    if (role === 'manager') return 'Manager'
-    if (role === 'director') return 'Director'
-    if (role === 'employee') return 'Angajat'
-    return '...'
+    if (!userInfo?.role) return '...'
+    if (userInfo.role === 'admin') return 'Administrator'
+    if (userInfo.role === 'manager') return 'Manager'
+    if (userInfo.role === 'director') return 'Director'
+    return 'Angajat'
   }
+
+  const role = userInfo?.role || ''
 
   const navItems = [
     { label: 'Panou principal', href: '/dashboard', icon: <LayoutDashboard size={18} />, show: true },
@@ -69,8 +73,8 @@ export default function Sidebar() {
     { label: 'Istoric incarcari', href: '/admin/logs', icon: <FileText size={18} />, show: role === 'admin' },
   ].filter(n => n.show)
 
-  const initials = userName?.charAt(0)?.toUpperCase() || userEmail?.charAt(0)?.toUpperCase() || '?'
-  const displayName = userName || userEmail || '...'
+  const initials = userInfo?.name?.charAt(0)?.toUpperCase() || userInfo?.email?.charAt(0)?.toUpperCase() || '?'
+  const displayName = userInfo?.name || userInfo?.email || '...'
 
   return (
     <aside className="w-64 min-h-screen bg-blue-900 flex flex-col">
