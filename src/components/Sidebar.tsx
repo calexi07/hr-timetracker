@@ -11,21 +11,28 @@ export default function Sidebar() {
   const router = useRouter()
   const supabase = createClient()
   const [userName, setUserName] = useState('')
+  const [userEmail, setUserEmail] = useState('')
   const [role, setRole] = useState('')
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
+
+      setUserEmail(user.email || '')
+
       const { data } = await supabase
         .from('app_users')
         .select('name, role')
         .eq('id', user.id)
         .single()
+
       if (data) {
         setUserName(data.name || user.email || '')
         setRole(data.role)
       }
+      setReady(true)
     }
     load()
   }, [])
@@ -49,6 +56,9 @@ export default function Sidebar() {
     { label: 'Gestionare angajati', href: '/admin/users', icon: <Users size={18} />, show: role === 'admin' },
     { label: 'Istoric incarcari', href: '/admin/logs', icon: <FileText size={18} />, show: role === 'admin' },
   ].filter(n => n.show)
+
+  const initials = userName?.charAt(0)?.toUpperCase() || userEmail?.charAt(0)?.toUpperCase() || '?'
+  const displayName = userName || userEmail || '...'
 
   return (
     <aside className="w-64 min-h-screen bg-blue-900 flex flex-col">
@@ -86,19 +96,23 @@ export default function Sidebar() {
 
       <div className="p-4 border-t border-blue-700">
         <div className="flex items-center gap-3 px-3 py-2 mb-2">
-          <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-semibold">
-            {userName?.charAt(0)?.toUpperCase() || '?'}
+          <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-semibold shrink-0">
+            {initials}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-white text-xs font-medium truncate">{userName}</p>
+            <p className="text-white text-xs font-medium truncate">{displayName}</p>
             <div className="flex items-center gap-1 mt-0.5">
               {role === 'admin' && <Shield size={10} className="text-blue-400" />}
-              <span className="text-blue-400 text-xs">{getRolLabel()}</span>
+              <span className="text-blue-400 text-xs">
+                {ready ? getRolLabel() : '...'}
+              </span>
             </div>
           </div>
         </div>
-        <button onClick={handleLogout}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-blue-300 hover:text-white hover:bg-blue-800 text-sm transition-all">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-blue-300 hover:text-white hover:bg-blue-800 text-sm transition-all"
+        >
           <LogOut size={16} />
           Deconectare
         </button>
