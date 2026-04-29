@@ -4,66 +4,28 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { LayoutDashboard, Clock, Users, Upload, LogOut, ChevronRight, Shield, FileText, UsersRound } from 'lucide-react'
-import { useEffect, useState } from 'react'
-
-interface UserInfo {
-  name: string
-  email: string
-  role: string
-}
+import { useUser } from '@/components/UserContext'
 
 export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
-  const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
-
-  useEffect(() => {
-    // Citeste din localStorage instant
-    const cached = localStorage.getItem('pontaj_user')
-    if (cached) {
-      try { setUserInfo(JSON.parse(cached)) } catch {}
-    }
-
-    // Apoi fetch din supabase si actualizeaza
-    const load = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-      const { data } = await supabase
-        .from('app_users')
-        .select('name, role')
-        .eq('id', user.id)
-        .single()
-
-      if (data) {
-        const info: UserInfo = {
-          name: data.name || user.email || '',
-          email: user.email || '',
-          role: data.role || ''
-        }
-        setUserInfo(info)
-        localStorage.setItem('pontaj_user', JSON.stringify(info))
-      }
-    }
-    load()
-  }, [])
+  const user = useUser()
 
   const handleLogout = async () => {
-    localStorage.removeItem('pontaj_user')
     await supabase.auth.signOut()
     router.push('/login')
   }
 
   const getRolLabel = () => {
-    if (!userInfo?.role) return '...'
-    if (userInfo.role === 'admin') return 'Administrator'
-    if (userInfo.role === 'manager') return 'Manager'
-    if (userInfo.role === 'director') return 'Director'
+    if (!user?.role) return '...'
+    if (user.role === 'admin') return 'Administrator'
+    if (user.role === 'manager') return 'Manager'
+    if (user.role === 'director') return 'Director'
     return 'Angajat'
   }
 
-  const role = userInfo?.role || ''
+  const role = user?.role || ''
 
   const navItems = [
     { label: 'Panou principal', href: '/dashboard', icon: <LayoutDashboard size={18} />, show: true },
@@ -73,8 +35,8 @@ export default function Sidebar() {
     { label: 'Istoric incarcari', href: '/admin/logs', icon: <FileText size={18} />, show: role === 'admin' },
   ].filter(n => n.show)
 
-  const initials = userInfo?.name?.charAt(0)?.toUpperCase() || userInfo?.email?.charAt(0)?.toUpperCase() || '?'
-  const displayName = userInfo?.name || userInfo?.email || '...'
+  const initials = user?.name?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || '?'
+  const displayName = user?.name || user?.email || '...'
 
   return (
     <aside className="w-64 min-h-screen bg-blue-900 flex flex-col">
