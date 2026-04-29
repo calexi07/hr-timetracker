@@ -9,6 +9,7 @@ import DateFilter from '@/components/DateFilter'
 import TimesheetTable from '@/components/TimesheetTable'
 import HoursChart from '@/components/charts/HoursChart'
 import Sidebar from '@/components/Sidebar'
+import LastUpdated from '@/components/LastUpdated'
 
 const NORMA_ZI = 8.25
 
@@ -111,14 +112,17 @@ export default function TeamPage() {
       <main className="flex-1 overflow-auto p-8">
         {!selected ? (
           <>
-            <div className="mb-8">
-              <h1 className="text-2xl font-bold text-slate-900">
-                {currentUser?.role === 'director' ? 'Toti angajatii' : 'Echipa mea'}
-              </h1>
-              <p className="text-slate-500 mt-1">
-                {team.length} {team.length === 1 ? 'angajat' : 'angajati'} —
-                click pe un angajat pentru a vedea pontajul
-              </p>
+            <div className="flex items-start justify-between mb-8">
+              <div>
+                <h1 className="text-2xl font-bold text-slate-900">
+                  {currentUser?.role === 'director' ? 'Toti angajatii' : 'Echipa mea'}
+                </h1>
+                <p className="text-slate-500 mt-1">
+                  {team.length} {team.length === 1 ? 'angajat' : 'angajati'} —
+                  click pe un angajat pentru a vedea pontajul
+                </p>
+              </div>
+              <LastUpdated />
             </div>
 
             {team.length === 0 ? (
@@ -173,14 +177,17 @@ export default function TeamPage() {
                 <ArrowLeft size={16} />
                 Inapoi la echipa
               </button>
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-lg">
-                  {selected.name?.charAt(0)?.toUpperCase() || '?'}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-lg">
+                    {selected.name?.charAt(0)?.toUpperCase() || '?'}
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold text-slate-900">{selected.name}</h1>
+                    <p className="text-slate-400 text-sm">{selected.email}</p>
+                  </div>
                 </div>
-                <div>
-                  <h1 className="text-2xl font-bold text-slate-900">{selected.name}</h1>
-                  <p className="text-slate-400 text-sm">{selected.email}</p>
-                </div>
+                <LastUpdated />
               </div>
             </div>
 
