@@ -12,12 +12,27 @@ function getStatus(hours: number): { label: string; color: string } {
   return { label: 'De recuperat', color: 'bg-red-100 text-red-700' }
 }
 
-function getDiff(hours: number): { text: string; color: string } {
-  const diff = hours - NORMA_ZI
+function formatDiff(hours: number): { text: string; color: string } {
   if (hours === 0) return { text: '—', color: 'text-slate-400' }
-  if (Math.abs(diff) <= 0.25) return { text: '±0', color: 'text-green-600' }
-  if (diff > 0) return { text: `+${formatHours(diff)}`, color: 'text-blue-600 font-semibold' }
-  return { text: `-${formatHours(Math.abs(diff))}`, color: 'text-red-600 font-semibold' }
+  
+  const diff = hours - NORMA_ZI
+  const totalMinute = Math.round(diff * 60)
+  
+  if (totalMinute === 0) return { text: '±0m', color: 'text-green-600' }
+  
+  const semn = totalMinute > 0 ? '+' : '-'
+  const absTotalMinute = Math.abs(totalMinute)
+  const h = Math.floor(absTotalMinute / 60)
+  const m = absTotalMinute % 60
+  
+  let text = semn
+  if (h > 0) text += `${h}h `
+  text += `${m}m`
+  
+  return {
+    text,
+    color: totalMinute > 0 ? 'text-blue-600 font-semibold' : 'text-red-600 font-semibold'
+  }
 }
 
 export default function TimesheetTable({ timesheets }: { timesheets: any[] }) {
@@ -25,13 +40,13 @@ export default function TimesheetTable({ timesheets }: { timesheets: any[] }) {
     downloadCSV(
       timesheets.map(t => {
         const diff = Number(t.hours_worked) - NORMA_ZI
+        const totalMinute = Math.round(diff * 60)
         return {
           'Data': t.date,
           'Intrare': t.check_in,
           'Iesire': t.check_out,
           'Ore lucrate': t.hours_worked,
-          'Norma': NORMA_ZI,
-          'Diferenta': diff >= 0 ? `+${diff.toFixed(2)}` : diff.toFixed(2),
+          'Diferenta (minute)': totalMinute >= 0 ? `+${totalMinute}m` : `${totalMinute}m`,
           'Status': getStatus(Number(t.hours_worked)).label,
           'Departament': t.department,
           'Angajat': t.employee_name,
@@ -51,7 +66,7 @@ export default function TimesheetTable({ timesheets }: { timesheets: any[] }) {
 
   const totalOre = timesheets.reduce((s, r) => s + Number(r.hours_worked), 0)
   const totalNorma = timesheets.length * NORMA_ZI
-  const totalDiff = totalOre - totalNorma
+  const totalDiffMinute = Math.round((totalOre - totalNorma) * 60)
 
   return (
     <div>
@@ -69,7 +84,6 @@ export default function TimesheetTable({ timesheets }: { timesheets: any[] }) {
               <th className="text-left px-4 py-3 font-medium text-slate-500">Intrare</th>
               <th className="text-left px-4 py-3 font-medium text-slate-500">Iesire</th>
               <th className="text-right px-4 py-3 font-medium text-slate-500">Ore lucrate</th>
-              <th className="text-right px-4 py-3 font-medium text-slate-500">Norma</th>
               <th className="text-right px-4 py-3 font-medium text-slate-500">Diferenta</th>
               <th className="text-left px-4 py-3 font-medium text-slate-500">Status</th>
             </tr>
@@ -77,14 +91,13 @@ export default function TimesheetTable({ timesheets }: { timesheets: any[] }) {
           <tbody>
             {timesheets.map((t, i) => {
               const { label, color } = getStatus(Number(t.hours_worked))
-              const { text: diffText, color: diffColor } = getDiff(Number(t.hours_worked))
+              const { text: diffText, color: diffColor } = formatDiff(Number(t.hours_worked))
               return (
                 <tr key={t.id || i} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
                   <td className="px-4 py-3 font-medium text-slate-900">{formatDate(t.date)}</td>
                   <td className="px-4 py-3 text-slate-600">{formatTime(t.check_in)}</td>
                   <td className="px-4 py-3 text-slate-600">{formatTime(t.check_out)}</td>
                   <td className="px-4 py-3 text-right font-semibold text-slate-900">{formatHours(Number(t.hours_worked))}</td>
-                  <td className="px-4 py-3 text-right text-slate-400">8h 15m</td>
                   <td className={cn('px-4 py-3 text-right', diffColor)}>{diffText}</td>
                   <td className="px-4 py-3">
                     <span className={cn('badge', color)}>{label}</span>
@@ -97,27 +110,48 @@ export default function TimesheetTable({ timesheets }: { timesheets: any[] }) {
             <tr className="bg-slate-50 border-t-2 border-slate-200">
               <td colSpan={3} className="px-4 py-3 text-sm font-semibold text-slate-600">Total perioada</td>
               <td className="px-4 py-3 text-right font-bold text-slate-900">{formatHours(totalOre)}</td>
-              <td className="px-4 py-3 text-right font-bold text-slate-500">{formatHours(totalNorma)}</td>
               <td className={cn(
                 'px-4 py-3 text-right font-bold',
-                Math.abs(totalDiff) <= 0.25 ? 'text-green-600'
-                  : totalDiff > 0 ? 'text-blue-600'
+                totalDiffMinute === 0 ? 'text-green-600'
+                  : totalDiffMinute > 0 ? 'text-blue-600'
                   : 'text-red-600'
               )}>
-                {Math.abs(totalDiff) <= 0.25 ? '±0'
-                  : totalDiff > 0 ? `+${formatHours(totalDiff)}`
-                  : `-${formatHours(Math.abs(totalDiff))}`}
+                {totalDiffMinute === 0 ? '±0m'
+                  : totalDiffMinute > 0
+                  ? (() => {
+                      const h = Math.floor(totalDiffMinute / 60)
+                      const m = totalDiffMinute % 60
+                      return `+${h > 0 ? h + 'h ' : ''}${m}m`
+                    })()
+                  : (() => {
+                      const abs = Math.abs(totalDiffMinute)
+                      const h = Math.floor(abs / 60)
+                      const m = abs % 60
+                      return `-${h > 0 ? h + 'h ' : ''}${m}m`
+                    })()
+                }
               </td>
               <td className="px-4 py-3">
                 <span className={cn(
                   'badge',
-                  Math.abs(totalDiff) <= 0.25 ? 'bg-green-100 text-green-700'
-                    : totalDiff > 0 ? 'bg-blue-100 text-blue-700'
+                  totalDiffMinute === 0 ? 'bg-green-100 text-green-700'
+                    : totalDiffMinute > 0 ? 'bg-blue-100 text-blue-700'
                     : 'bg-red-100 text-red-700'
                 )}>
-                  {Math.abs(totalDiff) <= 0.25 ? 'Echilibrat'
-                    : totalDiff > 0 ? `Avans ${formatHours(totalDiff)}`
-                    : `De recuperat ${formatHours(Math.abs(totalDiff))}`}
+                  {totalDiffMinute === 0 ? 'Echilibrat'
+                    : totalDiffMinute > 0
+                    ? (() => {
+                        const h = Math.floor(totalDiffMinute / 60)
+                        const m = totalDiffMinute % 60
+                        return `Avans +${h > 0 ? h + 'h ' : ''}${m}m`
+                      })()
+                    : (() => {
+                        const abs = Math.abs(totalDiffMinute)
+                        const h = Math.floor(abs / 60)
+                        const m = abs % 60
+                        return `De recuperat ${h > 0 ? h + 'h ' : ''}${m}m`
+                      })()
+                  }
                 </span>
               </td>
             </tr>
