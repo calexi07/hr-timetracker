@@ -8,27 +8,26 @@ function getStatus(hours: number): { label: string; color: string } {
   const diff = hours - NORMA_ZI
   if (hours === 0) return { label: 'O singura intrare', color: 'bg-slate-100 text-slate-600' }
   if (Math.abs(diff) <= 0.25) return { label: 'Normal', color: 'bg-green-100 text-green-700' }
-  if (diff > 0.25) return { label: 'Avans', color: 'bg-blue-100 text-blue-700' }
-  return { label: 'De recuperat', color: 'bg-red-100 text-red-700' }
+  return { label: '⚠️ Atentie!', color: 'bg-amber-100 text-amber-700' }
 }
 
 function formatDiff(hours: number): { text: string; color: string } {
   if (hours === 0) return { text: '—', color: 'text-slate-400' }
-  
+
   const diff = hours - NORMA_ZI
   const totalMinute = Math.round(diff * 60)
-  
+
   if (totalMinute === 0) return { text: '±0m', color: 'text-green-600' }
-  
+
   const semn = totalMinute > 0 ? '+' : '-'
   const absTotalMinute = Math.abs(totalMinute)
   const h = Math.floor(absTotalMinute / 60)
   const m = absTotalMinute % 60
-  
+
   let text = semn
   if (h > 0) text += `${h}h `
   text += `${m}m`
-  
+
   return {
     text,
     color: totalMinute > 0 ? 'text-blue-600 font-semibold' : 'text-red-600 font-semibold'
@@ -67,6 +66,15 @@ export default function TimesheetTable({ timesheets }: { timesheets: any[] }) {
   const totalOre = timesheets.reduce((s, r) => s + Number(r.hours_worked), 0)
   const totalNorma = timesheets.length * NORMA_ZI
   const totalDiffMinute = Math.round((totalOre - totalNorma) * 60)
+
+  const formatTotalDiff = (minute: number) => {
+    const abs = Math.abs(minute)
+    const h = Math.floor(abs / 60)
+    const m = abs % 60
+    const semn = minute >= 0 ? '+' : '-'
+    if (abs === 0) return '±0m'
+    return `${semn}${h > 0 ? h + 'h ' : ''}${m}m`
+  }
 
   return (
     <div>
@@ -116,20 +124,7 @@ export default function TimesheetTable({ timesheets }: { timesheets: any[] }) {
                   : totalDiffMinute > 0 ? 'text-blue-600'
                   : 'text-red-600'
               )}>
-                {totalDiffMinute === 0 ? '±0m'
-                  : totalDiffMinute > 0
-                  ? (() => {
-                      const h = Math.floor(totalDiffMinute / 60)
-                      const m = totalDiffMinute % 60
-                      return `+${h > 0 ? h + 'h ' : ''}${m}m`
-                    })()
-                  : (() => {
-                      const abs = Math.abs(totalDiffMinute)
-                      const h = Math.floor(abs / 60)
-                      const m = abs % 60
-                      return `-${h > 0 ? h + 'h ' : ''}${m}m`
-                    })()
-                }
+                {formatTotalDiff(totalDiffMinute)}
               </td>
               <td className="px-4 py-3">
                 <span className={cn(
@@ -138,20 +133,11 @@ export default function TimesheetTable({ timesheets }: { timesheets: any[] }) {
                     : totalDiffMinute > 0 ? 'bg-blue-100 text-blue-700'
                     : 'bg-red-100 text-red-700'
                 )}>
-                  {totalDiffMinute === 0 ? 'Echilibrat'
+                  {totalDiffMinute === 0
+                    ? 'Echilibrat'
                     : totalDiffMinute > 0
-                    ? (() => {
-                        const h = Math.floor(totalDiffMinute / 60)
-                        const m = totalDiffMinute % 60
-                        return `Avans +${h > 0 ? h + 'h ' : ''}${m}m`
-                      })()
-                    : (() => {
-                        const abs = Math.abs(totalDiffMinute)
-                        const h = Math.floor(abs / 60)
-                        const m = abs % 60
-                        return `De recuperat ${h > 0 ? h + 'h ' : ''}${m}m`
-                      })()
-                  }
+                    ? `Avans ${formatTotalDiff(totalDiffMinute)}`
+                    : `De recuperat ${formatTotalDiff(totalDiffMinute).replace('-', '')}`}
                 </span>
               </td>
             </tr>
