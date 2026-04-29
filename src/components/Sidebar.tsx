@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { LayoutDashboard, Clock, Users, Upload, LogOut, ChevronRight, Shield, FileText, UsersRound } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 export default function Sidebar() {
   const pathname = usePathname()
@@ -14,27 +14,38 @@ export default function Sidebar() {
   const [userEmail, setUserEmail] = useState('')
   const [role, setRole] = useState('')
   const [ready, setReady] = useState(false)
+  const attempts = useRef(0)
+
+  const loadUser = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return false
+
+    setUserEmail(user.email || '')
+
+    const { data, error } = await supabase
+      .from('app_users')
+      .select('name, role')
+      .eq('id', user.id)
+      .single()
+
+    if (data) {
+      setUserName(data.name || user.email || '')
+      setRole(data.role || '')
+      setReady(true)
+      return true
+    }
+    return false
+  }
 
   useEffect(() => {
-    const load = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-      setUserEmail(user.email || '')
-
-      const { data } = await supabase
-        .from('app_users')
-        .select('name, role')
-        .eq('id', user.id)
-        .single()
-
-      if (data) {
-        setUserName(data.name || user.email || '')
-        setRole(data.role)
+    const tryLoad = async () => {
+      const ok = await loadUser()
+      if (!ok && attempts.current < 5) {
+        attempts.current += 1
+        setTimeout(tryLoad, 800)
       }
-      setReady(true)
     }
-    load()
+    tryLoad()
   }, [])
 
   const handleLogout = async () => {
@@ -46,7 +57,8 @@ export default function Sidebar() {
     if (role === 'admin') return 'Administrator'
     if (role === 'manager') return 'Manager'
     if (role === 'director') return 'Director'
-    return 'Angajat'
+    if (role === 'employee') return 'Angajat'
+    return '...'
   }
 
   const navItems = [
@@ -103,9 +115,7 @@ export default function Sidebar() {
             <p className="text-white text-xs font-medium truncate">{displayName}</p>
             <div className="flex items-center gap-1 mt-0.5">
               {role === 'admin' && <Shield size={10} className="text-blue-400" />}
-              <span className="text-blue-400 text-xs">
-                {ready ? getRolLabel() : '...'}
-              </span>
+              <span className="text-blue-400 text-xs">{getRolLabel()}</span>
             </div>
           </div>
         </div>
