@@ -14,7 +14,8 @@ function getStatus(hours: number): { label: string; color: string } {
   const diff = hours - NORMA_ZI
   if (hours === 0) return { label: 'Normal', color: 'bg-green-100 text-green-700' }
   if (Math.abs(diff) <= 0.25) return { label: 'Normal', color: 'bg-green-100 text-green-700' }
-  return { label: '⚠️ Atentie!', color: 'bg-amber-100 text-amber-700' }
+  if (diff > 0.25) return { label: 'Timp in plus', color: 'bg-blue-100 text-blue-700' }
+  return { label: 'Timp de recuperat', color: 'bg-amber-100 text-amber-700' }
 }
 
 function formatDiff(hours: number): { text: string; color: string } {
@@ -52,7 +53,6 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
 
   const empId = employeeId || user?.employee_id
 
-  // Incarca observatiile pentru zilele fara pontaj
   useEffect(() => {
     if (!empId || !from || !to) return
     const load = async () => {
@@ -71,7 +71,6 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
     load()
   }, [empId, from, to])
 
-  // Genereaza toate zilele
   const allDays = from && to ? eachDayOfInterval({
     start: parseISO(from),
     end: parseISO(to)
@@ -107,7 +106,6 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
     setSaving(true)
 
     if (modal.pontaj) {
-      // Salveaza in timesheets
       const { error } = await supabase
         .from('timesheets')
         .update({ observatii: modal.observatie.trim() || null })
@@ -125,7 +123,6 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
           : r
       ))
     } else {
-      // Salveaza in observatii_zile
       if (!empId) {
         toast.error('ID angajat lipsa')
         setSaving(false)
@@ -149,7 +146,6 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
 
         setObservatiiZile(prev => ({ ...prev, [modal.date]: modal.observatie.trim() }))
       } else {
-        // Sterge daca e goala
         await supabase
           .from('observatii_zile')
           .delete()
@@ -206,7 +202,6 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
 
   return (
     <div>
-      {/* Modal */}
       {modal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeModal} />
@@ -399,7 +394,7 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                   {totalDiffMinute === 0
                     ? 'Echilibrat'
                     : totalDiffMinute > 0
-                    ? `Avans ${formatTotalDiff(totalDiffMinute)}`
+                    ? `Timp in plus ${formatTotalDiff(totalDiffMinute)}`
                     : `De recuperat ${formatTotalDiff(totalDiffMinute).replace('-', '')}`}
                 </span>
               </td>
