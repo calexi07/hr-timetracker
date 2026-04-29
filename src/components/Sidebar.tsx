@@ -3,43 +3,29 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
-import { LayoutDashboard, Clock, Users, Upload, LogOut, ChevronRight, Shield, FileText } from 'lucide-react'
+import { LayoutDashboard, Clock, Users, Upload, LogOut, ChevronRight, Shield, FileText, UsersRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
-
-const navItems = [
-  { label: 'Panou principal', href: '/dashboard', icon: <LayoutDashboard size={18} />, adminOnly: false },
-  { label: 'Incarca date', href: '/admin/upload', icon: <Upload size={18} />, adminOnly: true },
-  { label: 'Gestionare angajati', href: '/admin/users', icon: <Users size={18} />, adminOnly: true },
-  { label: 'Istoric incarcari', href: '/admin/logs', icon: <FileText size={18} />, adminOnly: true },
-]
 
 export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
   const [userName, setUserName] = useState('')
-  const [isAdmin, setIsAdmin] = useState(false)
-  const [loaded, setLoaded] = useState(false)
+  const [role, setRole] = useState('')
 
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-
-      setUserName(user.email || '')
-      setIsAdmin(false)
-
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('app_users')
         .select('name, role')
         .eq('id', user.id)
         .single()
-
       if (data) {
         setUserName(data.name || user.email || '')
-        setIsAdmin(data.role === 'admin')
+        setRole(data.role)
       }
-      setLoaded(true)
     }
     load()
   }, [])
@@ -49,7 +35,20 @@ export default function Sidebar() {
     router.push('/login')
   }
 
-  const visible = navItems.filter(n => !n.adminOnly || isAdmin)
+  const getRolLabel = () => {
+    if (role === 'admin') return 'Administrator'
+    if (role === 'manager') return 'Manager'
+    if (role === 'director') return 'Director'
+    return 'Angajat'
+  }
+
+  const navItems = [
+    { label: 'Panou principal', href: '/dashboard', icon: <LayoutDashboard size={18} />, show: true },
+    { label: 'Echipa mea', href: '/team', icon: <UsersRound size={18} />, show: role === 'manager' || role === 'director' },
+    { label: 'Incarca date', href: '/admin/upload', icon: <Upload size={18} />, show: role === 'admin' },
+    { label: 'Gestionare angajati', href: '/admin/users', icon: <Users size={18} />, show: role === 'admin' },
+    { label: 'Istoric incarcari', href: '/admin/logs', icon: <FileText size={18} />, show: role === 'admin' },
+  ].filter(n => n.show)
 
   return (
     <aside className="w-64 min-h-screen bg-blue-900 flex flex-col">
@@ -66,12 +65,10 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 p-4 space-y-1">
-        {visible.map(item => {
+        {navItems.map(item => {
           const active = pathname === item.href || pathname.startsWith(item.href + '/')
           return (
-            <Link
-              key={item.href}
-              href={item.href}
+            <Link key={item.href} href={item.href}
               className={cn(
                 'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group',
                 active ? 'bg-blue-500 text-white' : 'text-blue-200 hover:bg-blue-800 hover:text-white'
@@ -95,15 +92,13 @@ export default function Sidebar() {
           <div className="flex-1 min-w-0">
             <p className="text-white text-xs font-medium truncate">{userName}</p>
             <div className="flex items-center gap-1 mt-0.5">
-              {isAdmin && <Shield size={10} className="text-blue-400" />}
-              <span className="text-blue-400 text-xs">{isAdmin ? 'Administrator' : 'Angajat'}</span>
+              {role === 'admin' && <Shield size={10} className="text-blue-400" />}
+              <span className="text-blue-400 text-xs">{getRolLabel()}</span>
             </div>
           </div>
         </div>
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-blue-300 hover:text-white hover:bg-blue-800 text-sm transition-all"
-        >
+        <button onClick={handleLogout}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-blue-300 hover:text-white hover:bg-blue-800 text-sm transition-all">
           <LogOut size={16} />
           Deconectare
         </button>
