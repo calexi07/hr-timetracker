@@ -2,13 +2,15 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { formatHours, formatDate, formatTime } from '@/lib/utils'
-import { Clock, Calendar, TrendingUp, Award } from 'lucide-react'
+import { formatHours, formatDate, formatTime, cn } from '@/lib/utils'
+import { Clock, Calendar, TrendingUp, Award, AlertTriangle } from 'lucide-react'
 import { format, startOfMonth, startOfWeek } from 'date-fns'
 import TimesheetTable from '@/components/TimesheetTable'
 import DateFilter from '@/components/DateFilter'
 import HoursChart from '@/components/charts/HoursChart'
 import Sidebar from '@/components/Sidebar'
+
+const NORMA_ZI = 8.25
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -73,6 +75,10 @@ export default function DashboardPage() {
   const maxDay = timesheets.reduce((best, r) => Number(r.hours_worked) > best ? Number(r.hours_worked) : best, 0)
   const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
   const weekHours = timesheets.filter(r => r.date >= weekStart).reduce((s, r) => s + Number(r.hours_worked), 0)
+  const totalNorma = daysWorked * NORMA_ZI
+  const totalDiff = totalHours - totalNorma
+  const oreDeRecuperat = totalDiff < 0 ? Math.abs(totalDiff) : 0
+  const oreExtra = totalDiff > 0 ? totalDiff : 0
 
   return (
     <div className="flex min-h-screen">
@@ -101,7 +107,8 @@ export default function DashboardPage() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+
               <div className="card p-6 bg-blue-50 border-blue-100">
                 <div className="flex items-start justify-between">
                   <div>
@@ -153,6 +160,39 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
+
+              <div className={cn(
+                'card p-6 border',
+                oreDeRecuperat > 0.25 ? 'bg-red-50 border-red-100' : 'bg-green-50 border-green-100'
+              )}>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-slate-500 text-sm font-medium">Bilant perioada</p>
+                    <p className={cn('text-3xl font-bold mt-1',
+                      oreDeRecuperat > 0.25 ? 'text-red-700' : 'text-green-700'
+                    )}>
+                      {oreDeRecuperat > 0.25
+                        ? `-${formatHours(oreDeRecuperat)}`
+                        : oreExtra > 0.25
+                        ? `+${formatHours(oreExtra)}`
+                        : '✓'}
+                    </p>
+                    <p className="text-slate-400 text-xs mt-1">
+                      {oreDeRecuperat > 0.25
+                        ? 'De recuperat'
+                        : oreExtra > 0.25
+                        ? 'Ore suplimentare'
+                        : 'La norma'}
+                    </p>
+                  </div>
+                  <div className={cn('w-11 h-11 rounded-xl flex items-center justify-center',
+                    oreDeRecuperat > 0.25 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
+                  )}>
+                    <AlertTriangle size={20} />
+                  </div>
+                </div>
+              </div>
+
             </div>
 
             <div className="card p-6 mb-8">
