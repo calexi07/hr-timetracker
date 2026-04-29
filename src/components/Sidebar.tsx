@@ -39,8 +39,9 @@ export default function Sidebar() {
   const displayName = user?.name || user?.email || '...'
 
   return (
-    <aside className="w-64 min-h-screen bg-blue-900 flex flex-col">
-      <div className="p-6 border-b border-blue-700">
+    <aside className="w-64 min-h-screen bg-blue-900 flex flex-col sticky top-0 h-screen">
+      {/* Logo */}
+      <div className="p-6 border-b border-blue-700 shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-blue-500 flex items-center justify-center">
             <Clock size={18} className="text-white" />
@@ -52,7 +53,8 @@ export default function Sidebar() {
         </div>
       </div>
 
-      <nav className="flex-1 p-4 space-y-1">
+      {/* Nav */}
+      <nav className="p-4 space-y-1 shrink-0">
         {navItems.map(item => {
           const active = pathname === item.href || pathname.startsWith(item.href + '/')
           return (
@@ -72,8 +74,12 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div className="p-4 border-t border-blue-700">
-        <div className="flex items-center gap-3 px-3 py-2 mb-2">
+      {/* Separator */}
+      <div className="mx-4 border-t border-blue-700/50" />
+
+      {/* User info — imediat dupa nav */}
+      <div className="p-4 shrink-0">
+        <div className="flex items-center gap-3 px-3 py-2.5 bg-blue-800/50 rounded-xl mb-2">
           <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-semibold shrink-0">
             {initials}
           </div>
