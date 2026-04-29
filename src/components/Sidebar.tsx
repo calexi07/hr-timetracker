@@ -8,9 +8,9 @@ import { useEffect, useState } from 'react'
 
 const navItems = [
   { label: 'Panou principal', href: '/dashboard', icon: <LayoutDashboard size={18} />, adminOnly: false },
-  { label: 'Încarcă date', href: '/admin/upload', icon: <Upload size={18} />, adminOnly: true },
-  { label: 'Gestionare angajați', href: '/admin/users', icon: <Users size={18} />, adminOnly: true },
-  { label: 'Istoric încărcări', href: '/admin/logs', icon: <FileText size={18} />, adminOnly: true },
+  { label: 'Incarca date', href: '/admin/upload', icon: <Upload size={18} />, adminOnly: true },
+  { label: 'Gestionare angajati', href: '/admin/users', icon: <Users size={18} />, adminOnly: true },
+  { label: 'Istoric incarcari', href: '/admin/logs', icon: <FileText size={18} />, adminOnly: true },
 ]
 
 export default function Sidebar() {
@@ -19,20 +19,27 @@ export default function Sidebar() {
   const supabase = createClient()
   const [userName, setUserName] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     const load = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
-      const { data } = await supabase
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      setUserName(user.email || '')
+      setIsAdmin(false)
+
+      const { data, error } = await supabase
         .from('app_users')
         .select('name, role')
-        .eq('id', session.user.id)
+        .eq('id', user.id)
         .single()
+
       if (data) {
-        setUserName(data.name)
+        setUserName(data.name || user.email || '')
         setIsAdmin(data.role === 'admin')
       }
+      setLoaded(true)
     }
     load()
   }, [])
@@ -40,7 +47,6 @@ export default function Sidebar() {
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.push('/login')
-    router.refresh()
   }
 
   const visible = navItems.filter(n => !n.adminOnly || isAdmin)
@@ -63,7 +69,9 @@ export default function Sidebar() {
         {visible.map(item => {
           const active = pathname === item.href || pathname.startsWith(item.href + '/')
           return (
-            <Link key={item.href} href={item.href}
+            <Link
+              key={item.href}
+              href={item.href}
               className={cn(
                 'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group',
                 active ? 'bg-blue-500 text-white' : 'text-blue-200 hover:bg-blue-800 hover:text-white'
@@ -82,7 +90,7 @@ export default function Sidebar() {
       <div className="p-4 border-t border-blue-700">
         <div className="flex items-center gap-3 px-3 py-2 mb-2">
           <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-semibold">
-            {userName?.charAt(0) || '?'}
+            {userName?.charAt(0)?.toUpperCase() || '?'}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-white text-xs font-medium truncate">{userName}</p>
