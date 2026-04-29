@@ -1,16 +1,31 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
+import { X, Shield } from 'lucide-react'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [showModal, setShowModal] = useState(false)
+  const [admins, setAdmins] = useState<any[]>([])
   const router = useRouter()
   const supabase = createClient()
+
+  useEffect(() => {
+    const loadAdmins = async () => {
+      const { data } = await supabase
+        .from('app_users')
+        .select('name, email')
+        .eq('role', 'admin')
+        .order('name')
+      setAdmins(data || [])
+    }
+    loadAdmins()
+  }, [])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -27,6 +42,61 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex bg-slate-50">
+
+      {/* Modal resetare parola */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setShowModal(false)}
+          />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 z-10">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-900">Resetare parolă</h3>
+              <button
+                onClick={() => setShowModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p className="text-slate-600 text-sm mb-5">
+              Pentru resetarea parolei, ia legătura cu un administrator IT din lista de mai jos:
+            </p>
+
+            <div className="space-y-3">
+              {admins.length === 0 ? (
+                <p className="text-slate-400 text-sm text-center py-4">Se incarca...</p>
+              ) : (
+                admins.map((admin, i) => (
+                  <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                    <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-sm font-semibold shrink-0">
+                      {admin.name?.charAt(0)?.toUpperCase() || '?'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-slate-900 text-sm">{admin.name}</p>
+                      <p className="text-slate-400 text-xs truncate">{admin.email}</p>
+                    </div>
+                    <div className="flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-full">
+                      <Shield size={10} className="text-blue-500" />
+                      <span className="text-blue-600 text-xs font-medium">Admin</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <button
+              onClick={() => setShowModal(false)}
+              className="btn-primary w-full justify-center mt-5"
+            >
+              Am inteles
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Stanga — branding */}
       <div className="hidden lg:flex w-1/2 bg-gradient-to-br from-blue-900 via-blue-700 to-blue-500 flex-col justify-between p-12">
         <div className="flex items-center gap-3">
@@ -102,9 +172,13 @@ export default function LoginPage() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-medium text-slate-700">Parola</label>
-                <a href="/reset-password" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(true)}
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                >
                   Ai uitat parola?
-                </a>
+                </button>
               </div>
               <div className="relative">
                 <input
