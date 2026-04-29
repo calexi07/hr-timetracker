@@ -1,19 +1,39 @@
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+'use client'
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 
-export default async function Home() {
+export default function Home() {
+  const router = useRouter()
   const supabase = createClient()
-  
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) redirect('/login')
 
-  const { data: appUser } = await supabase
-    .from('app_users')
-    .select('role')
-    .eq('id', user.id)
-    .single()
+  useEffect(() => {
+    const check = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (!user) {
+        router.push('/login')
+        return
+      }
 
-  if (appUser?.role === 'admin') redirect('/admin/upload')
-  redirect('/dashboard')
+      const { data: appUser } = await supabase
+        .from('app_users')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+      if (appUser?.role === 'admin') {
+        router.push('/admin/upload')
+      } else {
+        router.push('/dashboard')
+      }
+    }
+    check()
+  }, [])
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <p className="text-slate-400 text-sm">Se incarca...</p>
+    </div>
+  )
 }
