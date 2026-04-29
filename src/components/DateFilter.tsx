@@ -37,7 +37,6 @@ export default function DateFilter({ from, to, onFilter }: Props) {
           type="date"
           value={localTo}
           min={localFrom}
-          max={today}
           onChange={e => setLocalTo(e.target.value)}
           className="input w-auto text-sm py-1.5"
         />
