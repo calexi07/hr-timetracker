@@ -51,11 +51,11 @@ export default function TeamPage() {
 
       setCurrentUser(u)
 
-      let query = supabase
-        .from('app_users')
-        .select('*')
-        .eq('role', 'employee')
-        .order('name')
+     let query = supabase
+  .from('app_users')
+  .select('*')
+  .in('role', ['employee', 'admin', 'director'])
+  .order('name')
 
       if (u.role === 'manager') {
         query = query.eq('manager_id', u.id)
