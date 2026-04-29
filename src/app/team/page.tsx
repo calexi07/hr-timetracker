@@ -421,7 +421,7 @@ export default function TeamPage() {
                     <h2 className="text-base font-semibold text-slate-900">Detalii pontaj</h2>
                     <span className="text-xs text-slate-400">{timesheets.length} inregistrari</span>
                   </div>
-              <TimesheetTable timesheets={timesheets} readonly={true} from={from} to={to} />
+             <TimesheetTable timesheets={timesheets} readonly={true} from={from} to={to} employeeId={Number(selected.employee_id)} />
                 </div>
               </>
             )}
