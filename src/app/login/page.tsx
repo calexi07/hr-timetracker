@@ -54,12 +54,6 @@ export default function LoginPage() {
     router.refresh()
   }
 
-  const handlePinInput = (val: string) => {
-    // Accepta doar cifre
-    const clean = val.replace(/\D/g, '').slice(0, 10)
-    setPin(clean)
-  }
-
   return (
     <div className="min-h-screen flex bg-slate-50">
       {/* Modal contact admin */}
@@ -223,7 +217,7 @@ export default function LoginPage() {
                   <div>
                     <p className="font-semibold text-blue-900 text-sm">Ce este PIN-ul?</p>
                     <p className="text-blue-700 text-xs mt-1 leading-relaxed">
-                 PIN-ul tau este <strong>ID-ul de utilizator</strong> din sistemul intern al companiei.
+                      PIN-ul tau este <strong>ID-ul de utilizator</strong> din sistemul intern al companiei.
                       Il poti obtine de la administratorul IT.
                     </p>
                   </div>
@@ -233,20 +227,19 @@ export default function LoginPage() {
               <form onSubmit={handlePinSubmit} className="space-y-5">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    PIN (ID utilizator)
+                    PIN
                   </label>
                   <input
                     type="password"
-                    inputMode="numeric"
                     value={pin}
-                    onChange={e => handlePinInput(e.target.value)}
-                    placeholder="••••••"
+                    onChange={e => setPin(e.target.value)}
+                    placeholder="••••••••"
                     required
                     autoFocus
-                    className="input text-base py-3 tracking-widest text-center text-xl"
+                    className="input text-base py-3 text-center tracking-widest text-xl"
                   />
                   <p className="text-xs text-slate-400 mt-1.5 text-center">
-                    Ex: daca ID-ul tau e <strong>21</strong>, PIN-ul este <strong>21</strong>
+                    Ex: daca numele tau e Ionescu si ID-ul e 21, PIN-ul este <strong>ionescu21</strong>
                   </p>
                 </div>
 
