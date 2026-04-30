@@ -4,12 +4,13 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatHours, cn } from '@/lib/utils'
 import { format, startOfMonth } from 'date-fns'
-import { ArrowLeft, Users, Clock, AlertTriangle, CheckCircle2, TrendingUp } from 'lucide-react'
+import { ArrowLeft, Users, Clock, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import DateFilter from '@/components/DateFilter'
 import TimesheetTable from '@/components/TimesheetTable'
 import HoursChart from '@/components/charts/HoursChart'
 import Sidebar from '@/components/Sidebar'
 import LastUpdated from '@/components/LastUpdated'
+import { useUser } from '@/components/UserContext'
 
 const NORMA_ZI = 8.25
 
@@ -24,6 +25,7 @@ interface MemberSummary {
 export default function TeamPage() {
   const router = useRouter()
   const supabase = createClient()
+  const contextUser = useUser()
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [team, setTeam] = useState<any[]>([])
   const [summaries, setSummaries] = useState<MemberSummary[]>([])
@@ -51,26 +53,41 @@ export default function TeamPage() {
 
       setCurrentUser(u)
 
-     let query = supabase
-  .from('app_users')
-  .select('*')
-  .in('role', ['employee', 'admin', 'director'])
-  .order('name')
-
-      if (u.role === 'manager') {
-        query = query.eq('manager_id', u.id)
-      }
-
-      const { data: teamData } = await query
-      const members = teamData || []
+      const members = await loadTeam(u)
       setTeam(members)
-
-      // Incarca sumarul pentru toti membrii
       await loadSummaries(members, from, to)
       setLoading(false)
     }
     init()
   }, [])
+
+  const loadTeam = async (u: any): Promise<any[]> => {
+    // Director vede toata lumea
+    if (u.role === 'director') {
+      const { data } = await supabase
+        .from('app_users')
+        .select('*')
+        .neq('id', u.id)
+        .order('name')
+      return data || []
+    }
+
+    // Manager vede subordonatii recursiv prin functia SQL
+    const { data: subordinateIds } = await supabase
+      .rpc('get_subordinates', { manager_uuid: u.id })
+
+    if (!subordinateIds || subordinateIds.length === 0) return []
+
+    const ids = subordinateIds.map((s: any) => s.id)
+
+    const { data } = await supabase
+      .from('app_users')
+      .select('*')
+      .in('id', ids)
+      .order('name')
+
+    return data || []
+  }
 
   const loadSummaries = async (members: any[], f: string, t: string) => {
     setLoadingSummaries(true)
@@ -149,6 +166,21 @@ export default function TeamPage() {
   const atentionari = summaries.filter(s => s.diffMin < -15)
   const ok = summaries.filter(s => s.diffMin >= -15)
 
+  // Functie helper pentru a afisa rolul
+  const getRolLabel = (role: string) => {
+    if (role === 'admin') return 'Administrator'
+    if (role === 'manager') return 'Manager'
+    if (role === 'director') return 'Director'
+    return 'Angajat'
+  }
+
+  // Gaseste managerul direct al unui membru
+  const getManagerName = (member: any) => {
+    if (!member.manager_id) return null
+    const manager = team.find(m => m.id === member.manager_id)
+    return manager?.name || null
+  }
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <p className="text-slate-400 text-sm">Se incarca...</p>
@@ -167,8 +199,8 @@ export default function TeamPage() {
                   {currentUser?.role === 'director' ? 'Toti angajatii' : 'Echipa mea'}
                 </h1>
                 <p className="text-slate-500 mt-1">
-                  {team.length} {team.length === 1 ? 'angajat' : 'angajati'} —
-                  click pe un angajat pentru detalii pontaj
+                  {team.length} {team.length === 1 ? 'persoana' : 'persoane'} —
+                  click pentru detalii pontaj
                 </p>
               </div>
               <LastUpdated />
@@ -187,12 +219,7 @@ export default function TeamPage() {
                   <Users size={28} className="text-slate-400" />
                 </div>
                 <h2 className="text-lg font-semibold text-slate-900 mb-2">Niciun angajat asignat</h2>
-                <p className="text-slate-500 text-sm">
-                  {currentUser?.role === 'manager'
-                    ? 'Administratorul nu ti-a asignat niciun angajat inca.'
-                    : 'Nu exista angajati in sistem.'
-                  }
-                </p>
+                <p className="text-slate-500 text-sm">Nu ai niciun angajat in subordine.</p>
               </div>
             ) : (
               <>
@@ -204,7 +231,7 @@ export default function TeamPage() {
                         <Users size={18} className="text-slate-600" />
                       </div>
                       <div>
-                        <p className="text-xs text-slate-500 font-medium">Total angajati</p>
+                        <p className="text-xs text-slate-500 font-medium">Total in subordine</p>
                         <p className="text-2xl font-bold text-slate-900">{team.length}</p>
                       </div>
                     </div>
@@ -217,7 +244,7 @@ export default function TeamPage() {
                       </div>
                       <div>
                         <p className="text-xs text-slate-500 font-medium">Ore de recuperat</p>
-                        <p className="text-2xl font-bold text-red-700">{atentionari.length} angajati</p>
+                        <p className="text-2xl font-bold text-red-700">{atentionari.length} persoane</p>
                       </div>
                     </div>
                   </div>
@@ -229,7 +256,7 @@ export default function TeamPage() {
                       </div>
                       <div>
                         <p className="text-xs text-slate-500 font-medium">La norma / avans</p>
-                        <p className="text-2xl font-bold text-green-700">{ok.length} angajati</p>
+                        <p className="text-2xl font-bold text-green-700">{ok.length} persoane</p>
                       </div>
                     </div>
                   </div>
@@ -241,7 +268,7 @@ export default function TeamPage() {
                     <div className="flex items-center gap-2 mb-4">
                       <AlertTriangle size={16} className="text-red-600" />
                       <h2 className="font-semibold text-red-800 text-sm">
-                        Atentionari — {atentionari.length} {atentionari.length === 1 ? 'angajat' : 'angajati'} cu ore de recuperat
+                        Atentionari — {atentionari.length} {atentionari.length === 1 ? 'persoana' : 'persoane'} cu ore de recuperat
                       </h2>
                     </div>
                     <div className="space-y-2">
@@ -258,7 +285,10 @@ export default function TeamPage() {
                               </div>
                               <div>
                                 <p className="font-medium text-slate-900 text-sm">{s.member.name}</p>
-                                <p className="text-xs text-slate-400">{s.zile} zile lucrate · norma {formatHours(s.norma)}</p>
+                                <p className="text-xs text-slate-400">
+                                  {getRolLabel(s.member.role)} · {s.zile} zile lucrate
+                                  {getManagerName(s.member) && ` · Sub: ${getManagerName(s.member)}`}
+                                </p>
                               </div>
                             </div>
                             <div className="text-right">
@@ -271,8 +301,10 @@ export default function TeamPage() {
                   </div>
                 )}
 
-                {/* Toti angajatii */}
-                <h2 className="font-semibold text-slate-700 text-sm mb-3">Toti angajatii</h2>
+                {/* Toti membrii */}
+                <h2 className="font-semibold text-slate-700 text-sm mb-3">
+                  {currentUser?.role === 'director' ? 'Toate persoanele' : 'Toata echipa'}
+                </h2>
                 {loadingSummaries ? (
                   <div className="flex items-center justify-center py-12">
                     <p className="text-slate-400 text-sm">Se calculeaza sumarul...</p>
@@ -282,6 +314,7 @@ export default function TeamPage() {
                     {summaries.map(s => {
                       const areProbleme = s.diffMin < -15
                       const esteAvans = s.diffMin > 15
+                      const managerName = getManagerName(s.member)
                       return (
                         <button
                           key={s.member.id}
@@ -295,7 +328,7 @@ export default function TeamPage() {
                         >
                           <div className="flex items-center gap-3 mb-3">
                             <div className={cn(
-                              'w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all',
+                              'w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all text-sm',
                               areProbleme ? 'bg-red-100 text-red-700 group-hover:bg-red-500 group-hover:text-white'
                                 : esteAvans ? 'bg-blue-100 text-blue-700 group-hover:bg-blue-500 group-hover:text-white'
                                 : 'bg-green-100 text-green-700 group-hover:bg-green-500 group-hover:text-white'
@@ -304,9 +337,25 @@ export default function TeamPage() {
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="font-medium text-slate-900 truncate text-sm">{s.member.name}</p>
-                              <p className="text-xs text-slate-400">{s.zile} zile lucrate</p>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className={cn(
+                                  'text-xs px-1.5 py-0.5 rounded-full font-medium',
+                                  s.member.role === 'manager' ? 'bg-purple-100 text-purple-700'
+                                    : s.member.role === 'director' ? 'bg-blue-100 text-blue-700'
+                                    : s.member.role === 'admin' ? 'bg-slate-100 text-slate-600'
+                                    : 'bg-slate-100 text-slate-500'
+                                )}>
+                                  {getRolLabel(s.member.role)}
+                                </span>
+                              </div>
                             </div>
                           </div>
+
+                          {managerName && (
+                            <p className="text-xs text-slate-400 mb-2">
+                              👤 Sub: {managerName}
+                            </p>
+                          )}
 
                           <div className="flex items-center justify-between">
                             <div>
@@ -354,7 +403,17 @@ export default function TeamPage() {
                   </div>
                   <div>
                     <h1 className="text-2xl font-bold text-slate-900">{selected.name}</h1>
-                    <p className="text-slate-400 text-sm">{selected.email}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <p className="text-slate-400 text-sm">{selected.email}</p>
+                      <span className={cn(
+                        'text-xs px-1.5 py-0.5 rounded-full font-medium',
+                        selected.role === 'manager' ? 'bg-purple-100 text-purple-700'
+                          : selected.role === 'director' ? 'bg-blue-100 text-blue-700'
+                          : 'bg-slate-100 text-slate-500'
+                      )}>
+                        {getRolLabel(selected.role)}
+                      </span>
+                    </div>
                   </div>
                 </div>
                 <LastUpdated />
@@ -372,7 +431,7 @@ export default function TeamPage() {
             ) : !selected.employee_id ? (
               <div className="card p-8 text-center max-w-lg mx-auto">
                 <p className="text-slate-500 text-sm">
-                  Acest angajat nu are un ID asignat. Contacteaza administratorul.
+                  Acest utilizator nu are un ID de angajat asignat. Contacteaza administratorul.
                 </p>
               </div>
             ) : (
@@ -406,7 +465,7 @@ export default function TeamPage() {
                       {formatBilant(totalDiffMin)}
                     </p>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      {totalDiffMin === 0 ? 'Echilibrat' : totalDiffMin > 0 ? 'Avans' : 'De recuperat'}
+                      {totalDiffMin === 0 ? 'Echilibrat' : totalDiffMin > 0 ? 'Timp in plus' : 'De recuperat'}
                     </p>
                   </div>
                 </div>
@@ -421,7 +480,13 @@ export default function TeamPage() {
                     <h2 className="text-base font-semibold text-slate-900">Detalii pontaj</h2>
                     <span className="text-xs text-slate-400">{timesheets.length} inregistrari</span>
                   </div>
-             <TimesheetTable timesheets={timesheets} readonly={true} from={from} to={to} employeeId={Number(selected.employee_id)} />
+                  <TimesheetTable
+                    timesheets={timesheets}
+                    readonly={true}
+                    from={from}
+                    to={to}
+                    employeeId={Number(selected.employee_id)}
+                  />
                 </div>
               </>
             )}
