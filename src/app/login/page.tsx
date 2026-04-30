@@ -223,8 +223,8 @@ export default function LoginPage() {
                   <div>
                     <p className="font-semibold text-blue-900 text-sm">Ce este PIN-ul?</p>
                     <p className="text-blue-700 text-xs mt-1 leading-relaxed">
-                      PIN-ul tau este <strong>ID-ul de utilizator</strong> din sistemul de acces al companiei.
-                      Il gasesti pe cardul tau de acces sau il poti obtine de la administratorul IT.
+                 PIN-ul tau este <strong>ID-ul de utilizator</strong> din sistemul intern al companiei.
+                      Il poti obtine de la administratorul IT.
                     </p>
                   </div>
                 </div>
