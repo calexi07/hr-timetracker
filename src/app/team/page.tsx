@@ -4,13 +4,12 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatHours, cn } from '@/lib/utils'
 import { format, startOfMonth } from 'date-fns'
-import { ArrowLeft, Users, Clock, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Users, Clock, AlertTriangle, CheckCircle2, ChevronRight } from 'lucide-react'
 import DateFilter from '@/components/DateFilter'
 import TimesheetTable from '@/components/TimesheetTable'
 import HoursChart from '@/components/charts/HoursChart'
 import Sidebar from '@/components/Sidebar'
 import LastUpdated from '@/components/LastUpdated'
-import { useUser } from '@/components/UserContext'
 
 const NORMA_ZI = 8.25
 
@@ -25,15 +24,18 @@ interface MemberSummary {
 export default function TeamPage() {
   const router = useRouter()
   const supabase = createClient()
-  const contextUser = useUser()
   const [currentUser, setCurrentUser] = useState<any>(null)
-  const [team, setTeam] = useState<any[]>([])
+  const [directTeam, setDirectTeam] = useState<any[]>([])       // echipa directa
+  const [subManagers, setSubManagers] = useState<any[]>([])      // managerii subordonati
+  const [subManagerTeams, setSubManagerTeams] = useState<Record<string, any[]>>({}) // echipa fiecarui submanager
+  const [allMembers, setAllMembers] = useState<any[]>([])        // toti membrii (pentru director)
   const [summaries, setSummaries] = useState<MemberSummary[]>([])
   const [selected, setSelected] = useState<any>(null)
   const [timesheets, setTimesheets] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingTs, setLoadingTs] = useState(false)
   const [loadingSummaries, setLoadingSummaries] = useState(false)
+  const [expandedManagers, setExpandedManagers] = useState<Set<string>>(new Set())
   const [from, setFrom] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'))
   const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'))
 
@@ -53,41 +55,65 @@ export default function TeamPage() {
 
       setCurrentUser(u)
 
-      const members = await loadTeam(u)
-      setTeam(members)
-      await loadSummaries(members, from, to)
+      if (u.role === 'director') {
+        // Director vede toata lumea
+        const { data } = await supabase
+          .from('app_users')
+          .select('*')
+          .neq('id', u.id)
+          .order('name')
+        const members = data || []
+        setAllMembers(members)
+        await loadSummaries(members, from, to)
+      } else {
+        // Manager — echipa directa
+        const { data: directData } = await supabase
+          .from('app_users')
+          .select('*')
+          .eq('manager_id', u.id)
+          .order('name')
+
+        const direct = directData || []
+
+        // Separa managerii subordonati de angajatii directi
+        const subMgrs = direct.filter((m: any) => m.role === 'manager')
+        const directEmployees = direct.filter((m: any) => m.role !== 'manager')
+
+        setDirectTeam(directEmployees)
+        setSubManagers(subMgrs)
+
+        // Incarca echipa fiecarui submanager
+        const teams: Record<string, any[]> = {}
+        for (const mgr of subMgrs) {
+          const { data: subordinateIds } = await supabase
+            .rpc('get_subordinates', { manager_uuid: mgr.id })
+          if (subordinateIds && subordinateIds.length > 0) {
+            const ids = subordinateIds.map((s: any) => s.id)
+            const { data: mgrTeam } = await supabase
+              .from('app_users')
+              .select('*')
+              .in('id', ids)
+              .order('name')
+            teams[mgr.id] = mgrTeam || []
+          } else {
+            teams[mgr.id] = []
+          }
+        }
+        setSubManagerTeams(teams)
+
+        // Toti membrii pentru sumar
+        const allDirect = [...directEmployees, ...subMgrs]
+        const allSubordinates = Object.values(teams).flat()
+        const uniqueMembers = [...allDirect, ...allSubordinates].filter(
+          (m, i, arr) => arr.findIndex(x => x.id === m.id) === i
+        )
+        await loadSummaries(uniqueMembers, from, to)
+      }
+
       setLoading(false)
     }
     init()
   }, [])
-
-  const loadTeam = async (u: any): Promise<any[]> => {
-    // Director vede toata lumea
-    if (u.role === 'director') {
-      const { data } = await supabase
-        .from('app_users')
-        .select('*')
-        .neq('id', u.id)
-        .order('name')
-      return data || []
-    }
-
-    // Manager vede subordonatii recursiv prin functia SQL
-    const { data: subordinateIds } = await supabase
-      .rpc('get_subordinates', { manager_uuid: u.id })
-
-    if (!subordinateIds || subordinateIds.length === 0) return []
-
-    const ids = subordinateIds.map((s: any) => s.id)
-
-    const { data } = await supabase
-      .from('app_users')
-      .select('*')
-      .in('id', ids)
-      .order('name')
-
-    return data || []
-  }
 
   const loadSummaries = async (members: any[], f: string, t: string) => {
     setLoadingSummaries(true)
@@ -98,7 +124,6 @@ export default function TeamPage() {
         results.push({ member, totalOre: 0, zile: 0, norma: 0, diffMin: 0 })
         continue
       }
-
       const { data } = await supabase
         .from('timesheets')
         .select('hours_worked')
@@ -111,13 +136,15 @@ export default function TeamPage() {
       const zile = rows.length
       const norma = zile * NORMA_ZI
       const diffMin = Math.round((totalOre - norma) * 60)
-
       results.push({ member, totalOre, zile, norma, diffMin })
     }
 
     setSummaries(results)
     setLoadingSummaries(false)
   }
+
+  const getSummary = (memberId: string) =>
+    summaries.find(s => s.member.id === memberId)
 
   const loadTimesheets = async (employeeId: number, f: string, t: string) => {
     if (!employeeId) { setTimesheets([]); return }
@@ -146,8 +173,22 @@ export default function TeamPage() {
       await loadTimesheets(Number(selected.employee_id), f, t)
       setLoadingTs(false)
     } else {
-      await loadSummaries(team, f, t)
+      const allM = currentUser?.role === 'director'
+        ? allMembers
+        : [...directTeam, ...subManagers, ...Object.values(subManagerTeams).flat()].filter(
+            (m, i, arr) => arr.findIndex(x => x.id === m.id) === i
+          )
+      await loadSummaries(allM, f, t)
     }
+  }
+
+  const toggleManager = (managerId: string) => {
+    setExpandedManagers(prev => {
+      const next = new Set(prev)
+      if (next.has(managerId)) next.delete(managerId)
+      else next.add(managerId)
+      return next
+    })
   }
 
   const formatBilant = (minute: number) => {
@@ -159,14 +200,6 @@ export default function TeamPage() {
     return `${semn}${h > 0 ? h + 'h ' : ''}${m}m`
   }
 
-  const totalHours = timesheets.reduce((s, r) => s + Number(r.hours_worked), 0)
-  const totalNorma = timesheets.length * NORMA_ZI
-  const totalDiffMin = Math.round((totalHours - totalNorma) * 60)
-
-  const atentionari = summaries.filter(s => s.diffMin < -15)
-  const ok = summaries.filter(s => s.diffMin >= -15)
-
-  // Functie helper pentru a afisa rolul
   const getRolLabel = (role: string) => {
     if (role === 'admin') return 'Administrator'
     if (role === 'manager') return 'Manager'
@@ -174,18 +207,64 @@ export default function TeamPage() {
     return 'Angajat'
   }
 
-  // Gaseste managerul direct al unui membru
-  const getManagerName = (member: any) => {
-    if (!member.manager_id) return null
-    const manager = team.find(m => m.id === member.manager_id)
-    return manager?.name || null
-  }
+  const totalHours = timesheets.reduce((s, r) => s + Number(r.hours_worked), 0)
+  const totalNorma = timesheets.length * NORMA_ZI
+  const totalDiffMin = Math.round((totalHours - totalNorma) * 60)
+
+  const allSummaries = summaries
+  const atentionari = allSummaries.filter(s => s.diffMin < -15)
+  const ok = allSummaries.filter(s => s.diffMin >= -15)
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <p className="text-slate-400 text-sm">Se incarca...</p>
     </div>
   )
+
+  // Card pentru un membru
+  const MemberCard = ({ member }: { member: any }) => {
+    const s = getSummary(member.id)
+    const areProbleme = (s?.diffMin || 0) < -15
+    const esteAvans = (s?.diffMin || 0) > 15
+    return (
+      <button
+        onClick={() => handleSelectMember(member)}
+        className={cn(
+          'card p-4 text-left hover:shadow-md transition-all group border w-full',
+          areProbleme ? 'border-red-200 hover:border-red-400'
+            : esteAvans ? 'border-blue-200 hover:border-blue-400'
+            : 'border-slate-200 hover:border-green-300'
+        )}
+      >
+        <div className="flex items-center gap-3 mb-2">
+          <div className={cn(
+            'w-9 h-9 rounded-full flex items-center justify-center font-semibold text-sm shrink-0 transition-all',
+            areProbleme ? 'bg-red-100 text-red-700 group-hover:bg-red-500 group-hover:text-white'
+              : esteAvans ? 'bg-blue-100 text-blue-700 group-hover:bg-blue-500 group-hover:text-white'
+              : 'bg-green-100 text-green-700 group-hover:bg-green-500 group-hover:text-white'
+          )}>
+            {member.name?.charAt(0)?.toUpperCase() || '?'}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-slate-900 truncate text-sm">{member.name}</p>
+            <p className="text-xs text-slate-400">{s ? `${s.zile} zile` : '—'}</p>
+          </div>
+        </div>
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-slate-500">{formatHours(s?.totalOre || 0)}</p>
+          <p className={cn(
+            'text-xs font-bold',
+            areProbleme ? 'text-red-600' : esteAvans ? 'text-blue-600' : 'text-green-600'
+          )}>
+            {s ? formatBilant(s.diffMin) : '—'}
+          </p>
+        </div>
+        {!member.employee_id && (
+          <p className="text-xs text-amber-500 mt-1">⚠️ ID neasignat</p>
+        )}
+      </button>
+    )
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -199,8 +278,7 @@ export default function TeamPage() {
                   {currentUser?.role === 'director' ? 'Toti angajatii' : 'Echipa mea'}
                 </h1>
                 <p className="text-slate-500 mt-1">
-                  {team.length} {team.length === 1 ? 'persoana' : 'persoane'} —
-                  click pentru detalii pontaj
+                  Click pe un angajat pentru detalii pontaj
                 </p>
               </div>
               <LastUpdated />
@@ -209,181 +287,227 @@ export default function TeamPage() {
             <div className="mb-6">
               <DateFilter from={from} to={to} onFilter={async (f, t) => {
                 setFrom(f); setTo(t)
-                await loadSummaries(team, f, t)
+                const allM = currentUser?.role === 'director'
+                  ? allMembers
+                  : [...directTeam, ...subManagers, ...Object.values(subManagerTeams).flat()].filter(
+                      (m, i, arr) => arr.findIndex(x => x.id === m.id) === i
+                    )
+                await loadSummaries(allM, f, t)
               }} />
             </div>
 
-            {team.length === 0 ? (
-              <div className="card p-12 text-center max-w-lg mx-auto">
-                <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
-                  <Users size={28} className="text-slate-400" />
+            {/* Overview carduri */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+              <div className="card p-5 bg-slate-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-slate-200 flex items-center justify-center">
+                    <Users size={18} className="text-slate-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium">Total in subordine</p>
+                    <p className="text-2xl font-bold text-slate-900">{allSummaries.length}</p>
+                  </div>
                 </div>
-                <h2 className="text-lg font-semibold text-slate-900 mb-2">Niciun angajat asignat</h2>
-                <p className="text-slate-500 text-sm">Nu ai niciun angajat in subordine.</p>
               </div>
-            ) : (
-              <>
-                {/* Overview carduri */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-                  <div className="card p-5 bg-slate-50">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-slate-200 flex items-center justify-center">
-                        <Users size={18} className="text-slate-600" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500 font-medium">Total in subordine</p>
-                        <p className="text-2xl font-bold text-slate-900">{team.length}</p>
-                      </div>
-                    </div>
+              <div className="card p-5 bg-red-50 border-red-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center">
+                    <AlertTriangle size={18} className="text-red-600" />
                   </div>
-
-                  <div className="card p-5 bg-red-50 border-red-100">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center">
-                        <AlertTriangle size={18} className="text-red-600" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500 font-medium">Ore de recuperat</p>
-                        <p className="text-2xl font-bold text-red-700">{atentionari.length} persoane</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="card p-5 bg-green-50 border-green-100">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
-                        <CheckCircle2 size={18} className="text-green-600" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500 font-medium">La norma / avans</p>
-                        <p className="text-2xl font-bold text-green-700">{ok.length} persoane</p>
-                      </div>
-                    </div>
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium">Ore de recuperat</p>
+                    <p className="text-2xl font-bold text-red-700">{atentionari.length} persoane</p>
                   </div>
                 </div>
-
-                {/* Atentionari */}
-                {atentionari.length > 0 && (
-                  <div className="card p-5 mb-6 border-red-100 bg-red-50">
-                    <div className="flex items-center gap-2 mb-4">
-                      <AlertTriangle size={16} className="text-red-600" />
-                      <h2 className="font-semibold text-red-800 text-sm">
-                        Atentionari — {atentionari.length} {atentionari.length === 1 ? 'persoana' : 'persoane'} cu ore de recuperat
-                      </h2>
-                    </div>
-                    <div className="space-y-2">
-                      {atentionari
-                        .sort((a, b) => a.diffMin - b.diffMin)
-                        .map(s => (
-                          <div key={s.member.id}
-                            className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-red-100 cursor-pointer hover:border-red-300 transition-all"
-                            onClick={() => handleSelectMember(s.member)}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-red-700 text-xs font-semibold">
-                                {s.member.name?.charAt(0)?.toUpperCase() || '?'}
-                              </div>
-                              <div>
-                                <p className="font-medium text-slate-900 text-sm">{s.member.name}</p>
-                                <p className="text-xs text-slate-400">
-                                  {getRolLabel(s.member.role)} · {s.zile} zile lucrate
-                                  {getManagerName(s.member) && ` · Sub: ${getManagerName(s.member)}`}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <p className="font-bold text-red-600 text-sm">{formatBilant(s.diffMin)}</p>
-                              <p className="text-xs text-red-400">de recuperat</p>
-                            </div>
-                          </div>
-                        ))}
-                    </div>
+              </div>
+              <div className="card p-5 bg-green-50 border-green-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
+                    <CheckCircle2 size={18} className="text-green-600" />
                   </div>
-                )}
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium">La norma / avans</p>
+                    <p className="text-2xl font-bold text-green-700">{ok.length} persoane</p>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-                {/* Toti membrii */}
-                <h2 className="font-semibold text-slate-700 text-sm mb-3">
-                  {currentUser?.role === 'director' ? 'Toate persoanele' : 'Toata echipa'}
-                </h2>
+            {/* Atentionari */}
+            {atentionari.length > 0 && (
+              <div className="card p-5 mb-8 border-red-100 bg-red-50">
+                <div className="flex items-center gap-2 mb-4">
+                  <AlertTriangle size={16} className="text-red-600" />
+                  <h2 className="font-semibold text-red-800 text-sm">
+                    {atentionari.length} {atentionari.length === 1 ? 'persoana' : 'persoane'} cu ore de recuperat
+                  </h2>
+                </div>
+                <div className="space-y-2">
+                  {atentionari.sort((a, b) => a.diffMin - b.diffMin).map(s => (
+                    <div key={s.member.id}
+                      className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-red-100 cursor-pointer hover:border-red-300 transition-all"
+                      onClick={() => handleSelectMember(s.member)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-red-700 text-xs font-semibold">
+                          {s.member.name?.charAt(0)?.toUpperCase() || '?'}
+                        </div>
+                        <div>
+                          <p className="font-medium text-slate-900 text-sm">{s.member.name}</p>
+                          <p className="text-xs text-slate-400">{getRolLabel(s.member.role)} · {s.zile} zile</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-red-600 text-sm">{formatBilant(s.diffMin)}</p>
+                        <p className="text-xs text-red-400">de recuperat</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Director: toti membrii flat */}
+            {currentUser?.role === 'director' && (
+              <div>
+                <h2 className="font-semibold text-slate-700 text-sm mb-3">Toate persoanele</h2>
                 {loadingSummaries ? (
                   <div className="flex items-center justify-center py-12">
-                    <p className="text-slate-400 text-sm">Se calculeaza sumarul...</p>
+                    <p className="text-slate-400 text-sm">Se calculeaza...</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {summaries.map(s => {
-                      const areProbleme = s.diffMin < -15
-                      const esteAvans = s.diffMin > 15
-                      const managerName = getManagerName(s.member)
-                      return (
-                        <button
-                          key={s.member.id}
-                          onClick={() => handleSelectMember(s.member)}
-                          className={cn(
-                            'card p-5 text-left hover:shadow-md transition-all group border',
-                            areProbleme ? 'border-red-200 hover:border-red-400'
-                              : esteAvans ? 'border-blue-200 hover:border-blue-400'
-                              : 'border-slate-200 hover:border-green-300'
-                          )}
-                        >
-                          <div className="flex items-center gap-3 mb-3">
-                            <div className={cn(
-                              'w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all text-sm',
-                              areProbleme ? 'bg-red-100 text-red-700 group-hover:bg-red-500 group-hover:text-white'
-                                : esteAvans ? 'bg-blue-100 text-blue-700 group-hover:bg-blue-500 group-hover:text-white'
-                                : 'bg-green-100 text-green-700 group-hover:bg-green-500 group-hover:text-white'
-                            )}>
-                              {s.member.name?.charAt(0)?.toUpperCase() || '?'}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-slate-900 truncate text-sm">{s.member.name}</p>
-                              <div className="flex items-center gap-1.5 mt-0.5">
-                                <span className={cn(
-                                  'text-xs px-1.5 py-0.5 rounded-full font-medium',
-                                  s.member.role === 'manager' ? 'bg-purple-100 text-purple-700'
-                                    : s.member.role === 'director' ? 'bg-blue-100 text-blue-700'
-                                    : s.member.role === 'admin' ? 'bg-slate-100 text-slate-600'
-                                    : 'bg-slate-100 text-slate-500'
-                                )}>
-                                  {getRolLabel(s.member.role)}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {managerName && (
-                            <p className="text-xs text-slate-400 mb-2">
-                              👤 Sub: {managerName}
-                            </p>
-                          )}
-
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-xs text-slate-400">Total ore</p>
-                              <p className="font-bold text-slate-900">{formatHours(s.totalOre)}</p>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-xs text-slate-400">Bilant</p>
-                              <p className={cn(
-                                'font-bold text-sm',
-                                areProbleme ? 'text-red-600'
-                                  : esteAvans ? 'text-blue-600'
-                                  : 'text-green-600'
-                              )}>
-                                {s.diffMin === 0 ? '±0m' : formatBilant(s.diffMin)}
-                              </p>
-                            </div>
-                          </div>
-
-                          {!s.member.employee_id && (
-                            <p className="text-xs text-amber-500 mt-2">⚠️ ID neasignat</p>
-                          )}
-                        </button>
-                      )
-                    })}
+                    {allMembers.map(m => <MemberCard key={m.id} member={m} />)}
                   </div>
                 )}
-              </>
+              </div>
+            )}
+
+            {/* Manager: ierarhie clara */}
+            {currentUser?.role === 'manager' && (
+              <div className="space-y-8">
+
+                {/* Echipa directa */}
+                {directTeam.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-1 h-5 bg-blue-500 rounded-full" />
+                      <h2 className="font-semibold text-slate-900 text-sm">
+                        Echipa mea directa
+                        <span className="ml-2 text-xs font-normal text-slate-400">
+                          {directTeam.length} {directTeam.length === 1 ? 'persoana' : 'persoane'}
+                        </span>
+                      </h2>
+                    </div>
+                    {loadingSummaries ? (
+                      <p className="text-slate-400 text-sm">Se calculeaza...</p>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        {directTeam.map(m => <MemberCard key={m.id} member={m} />)}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Managerii subordonati si echipele lor */}
+                {subManagers.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-1 h-5 bg-purple-500 rounded-full" />
+                      <h2 className="font-semibold text-slate-900 text-sm">
+                        Manageri subordonati
+                        <span className="ml-2 text-xs font-normal text-slate-400">
+                          {subManagers.length} {subManagers.length === 1 ? 'manager' : 'manageri'}
+                        </span>
+                      </h2>
+                    </div>
+                    <div className="space-y-4">
+                      {subManagers.map(mgr => {
+                        const mgrTeam = subManagerTeams[mgr.id] || []
+                        const isExpanded = expandedManagers.has(mgr.id)
+                        const mgrSummary = getSummary(mgr.id)
+                        const areProbleme = (mgrSummary?.diffMin || 0) < -15
+                        const esteAvans = (mgrSummary?.diffMin || 0) > 15
+
+                        return (
+                          <div key={mgr.id} className="card border border-purple-100 overflow-hidden">
+                            {/* Header manager */}
+                            <div className="flex items-center gap-3 p-4 bg-purple-50">
+                              <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-semibold text-sm shrink-0">
+                                {mgr.name?.charAt(0)?.toUpperCase() || '?'}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <p className="font-semibold text-slate-900">{mgr.name}</p>
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">
+                                    Manager
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-400 mt-0.5">
+                                  {mgrTeam.length} {mgrTeam.length === 1 ? 'persoana' : 'persoane'} in echipa
+                                  {mgrSummary && (
+                                    <span className={cn(
+                                      'ml-2 font-medium',
+                                      areProbleme ? 'text-red-500' : esteAvans ? 'text-blue-500' : 'text-green-500'
+                                    )}>
+                                      · {formatBilant(mgrSummary.diffMin)}
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => handleSelectMember(mgr)}
+                                  className="btn-secondary text-xs py-1.5"
+                                >
+                                  Pontaj
+                                </button>
+                                {mgrTeam.length > 0 && (
+                                  <button
+                                    onClick={() => toggleManager(mgr.id)}
+                                    className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800 font-medium px-2 py-1.5 rounded-lg hover:bg-purple-100 transition-all"
+                                  >
+                                    {isExpanded ? 'Ascunde' : 'Vezi echipa'}
+                                    <ChevronRight size={14} className={cn('transition-transform', isExpanded && 'rotate-90')} />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Echipa managerului */}
+                            {isExpanded && mgrTeam.length > 0 && (
+                              <div className="p-4 border-t border-purple-100 bg-white">
+                                <p className="text-xs text-slate-400 mb-3 font-medium">
+                                  Echipa lui {mgr.name.split(' ')[0]}
+                                </p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                                  {mgrTeam.map(m => <MemberCard key={m.id} member={m} />)}
+                                </div>
+                              </div>
+                            )}
+
+                            {isExpanded && mgrTeam.length === 0 && (
+                              <div className="p-4 border-t border-purple-100 text-center">
+                                <p className="text-xs text-slate-400">Niciun angajat asignat acestui manager</p>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {directTeam.length === 0 && subManagers.length === 0 && (
+                  <div className="card p-12 text-center max-w-lg mx-auto">
+                    <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                      <Users size={28} className="text-slate-400" />
+                    </div>
+                    <h2 className="text-lg font-semibold text-slate-900 mb-2">Niciun angajat asignat</h2>
+                    <p className="text-slate-500 text-sm">Nu ai niciun angajat in subordine.</p>
+                  </div>
+                )}
+              </div>
             )}
           </>
         ) : (
@@ -405,12 +529,7 @@ export default function TeamPage() {
                     <h1 className="text-2xl font-bold text-slate-900">{selected.name}</h1>
                     <div className="flex items-center gap-2 mt-0.5">
                       <p className="text-slate-400 text-sm">{selected.email}</p>
-                      <span className={cn(
-                        'text-xs px-1.5 py-0.5 rounded-full font-medium',
-                        selected.role === 'manager' ? 'bg-purple-100 text-purple-700'
-                          : selected.role === 'director' ? 'bg-blue-100 text-blue-700'
-                          : 'bg-slate-100 text-slate-500'
-                      )}>
+                      <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-slate-100 text-slate-600">
                         {getRolLabel(selected.role)}
                       </span>
                     </div>
@@ -431,7 +550,7 @@ export default function TeamPage() {
             ) : !selected.employee_id ? (
               <div className="card p-8 text-center max-w-lg mx-auto">
                 <p className="text-slate-500 text-sm">
-                  Acest utilizator nu are un ID de angajat asignat. Contacteaza administratorul.
+                  Acest utilizator nu are un ID de angajat asignat.
                 </p>
               </div>
             ) : (
@@ -465,7 +584,9 @@ export default function TeamPage() {
                       {formatBilant(totalDiffMin)}
                     </p>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      {totalDiffMin === 0 ? 'Echilibrat' : totalDiffMin > 0 ? 'Timp in plus' : 'De recuperat'}
+                      {totalDiffMin === 0 ? 'Echilibrat'
+                        : totalDiffMin > 0 ? 'Timp in plus'
+                        : 'De recuperat'}
                     </p>
                   </div>
                 </div>
