@@ -18,15 +18,16 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
-  const [resetting, setResetting] = useState<string | null>(null)
   const [edits, setEdits] = useState<Record<string, { role: string; employee_id: string; name: string; manager_id: string }>>({})
   const [showForm, setShowForm] = useState(false)
   const [showPass, setShowPass] = useState(false)
   const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'employee', employee_id: '', manager_id: '' })
   const [creating, setCreating] = useState(false)
-  const [passwordModal, setPasswordModal] = useState<{ open: boolean; user: any | null }>({ open: false, user: null })
+  const [credModal, setCredModal] = useState<{ open: boolean; user: any | null }>({ open: false, user: null })
   const [newPassword, setNewPassword] = useState('')
+  const [newEmail, setNewEmail] = useState('')
   const [showNewPass, setShowNewPass] = useState(false)
+  const [resetting, setResetting] = useState(false)
   const supabase = createClient()
 
   useEffect(() => { load() }, [])
@@ -122,29 +123,63 @@ export default function UsersPage() {
     setCreating(false)
   }
 
-  const handleResetPassword = async () => {
-    if (!newPassword || newPassword.length < 6) {
+  const openCredModal = (user: any) => {
+    setCredModal({ open: true, user })
+    setNewEmail(user.email || '')
+    setNewPassword('')
+    setShowNewPass(false)
+  }
+
+  const closeCredModal = () => {
+    setCredModal({ open: false, user: null })
+    setNewEmail('')
+    setNewPassword('')
+  }
+
+  const handleUpdateCredentials = async () => {
+    if (!credModal.user) return
+
+    if (newPassword && newPassword.length < 6) {
       toast.error('Parola trebuie sa aiba minimum 6 caractere')
       return
     }
-    if (!passwordModal.user) return
-    setResetting(passwordModal.user.id)
+
+    if (!newEmail) {
+      toast.error('Emailul nu poate fi gol')
+      return
+    }
+
+    setResetting(true)
+
+    const payload: any = { userId: credModal.user.id }
+    if (newEmail !== credModal.user.email) payload.email = newEmail
+    if (newPassword) payload.password = newPassword
+
+    if (!payload.email && !payload.password) {
+      toast.error('Nu ai modificat nimic')
+      setResetting(false)
+      return
+    }
 
     const res = await fetch('/api/users/reset-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: passwordModal.user.id, password: newPassword })
+      body: JSON.stringify(payload)
     })
 
     const d = await res.json()
     if (!res.ok) {
       toast.error('Eroare: ' + d.error)
     } else {
-      toast.success(`Parola lui ${passwordModal.user.name} a fost resetata`)
-      setPasswordModal({ open: false, user: null })
-      setNewPassword('')
+      toast.success('Credentiale actualizate')
+      if (payload.email) {
+        setUsers(prev => prev.map(u =>
+          u.id === credModal.user.id ? { ...u, email: payload.email } : u
+        ))
+      }
+      closeCredModal()
     }
-    setResetting(null)
+    setResetting(false)
   }
 
   const setEdit = (userId: string, field: string, value: string, user: any) => {
@@ -164,61 +199,66 @@ export default function UsersPage() {
 
   return (
     <div className="p-8">
-      {/* Modal resetare parola */}
-      {passwordModal.open && passwordModal.user && (
+      {/* Modal credentiale */}
+      {credModal.open && credModal.user && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => { setPasswordModal({ open: false, user: null }); setNewPassword('') }} />
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeCredModal} />
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 z-10">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-lg font-semibold text-slate-900">Reseteaza parola</h3>
-                <p className="text-sm text-slate-400 mt-0.5">{passwordModal.user.name} · {passwordModal.user.email}</p>
+                <h3 className="text-lg font-semibold text-slate-900">Modifica credentiale</h3>
+                <p className="text-sm text-slate-400 mt-0.5">{credModal.user.name}</p>
               </div>
-              <button
-                onClick={() => { setPasswordModal({ open: false, user: null }); setNewPassword('') }}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
-              >
+              <button onClick={closeCredModal}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all">
                 <X size={18} />
               </button>
             </div>
 
-            <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 mb-4 text-xs text-amber-700">
-              Aceasta actiune va suprascrie parola curenta a utilizatorului. Comunica-i noua parola direct.
+            <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 mb-5 text-xs text-amber-700">
+              Modificarile sunt imediate. Comunica noile credentiale utilizatorului direct.
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Parola noua</label>
-              <div className="relative">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Adresa de email
+                </label>
                 <input
-                  type={showNewPass ? 'text' : 'password'}
-                  value={newPassword}
-                  onChange={e => setNewPassword(e.target.value)}
-                  placeholder="minimum 6 caractere"
-                  className="input pr-10"
+                  type="email"
+                  value={newEmail}
+                  onChange={e => setNewEmail(e.target.value)}
+                  className="input"
+                  placeholder="email@krka.biz"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowNewPass(!showNewPass)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  {showNewPass ? <EyeOff size={15} /> : <Eye size={15} />}
-                </button>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Parola noua <span className="text-slate-400 font-normal">(lasa gol pentru a nu schimba)</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showNewPass ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    placeholder="minimum 6 caractere"
+                    className="input pr-10"
+                  />
+                  <button type="button" onClick={() => setShowNewPass(!showNewPass)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    {showNewPass ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
               </div>
             </div>
 
             <div className="flex gap-3 mt-5">
-              <button
-                onClick={handleResetPassword}
-                disabled={!!resetting}
-                className="btn-primary flex-1 justify-center"
-              >
-                {resetting ? 'Se reseteaza...' : <><KeyRound size={15} />Seteaza parola noua</>}
+              <button onClick={handleUpdateCredentials} disabled={resetting}
+                className="btn-primary flex-1 justify-center">
+                {resetting ? 'Se salveaza...' : <><KeyRound size={15} />Salveaza modificarile</>}
               </button>
-              <button
-                onClick={() => { setPasswordModal({ open: false, user: null }); setNewPassword('') }}
-                className="btn-secondary flex-1 justify-center"
-              >
+              <button onClick={closeCredModal} className="btn-secondary flex-1 justify-center">
                 Anuleaza
               </button>
             </div>
@@ -319,7 +359,7 @@ export default function UsersPage() {
               <th className="text-left px-4 py-3 font-medium text-slate-500">Rol</th>
               <th className="text-left px-4 py-3 font-medium text-slate-500">ID Angajat</th>
               <th className="text-left px-4 py-3 font-medium text-slate-500">Superior direct</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-500">Parola</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-500">Credentiale</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -360,8 +400,7 @@ export default function UsersPage() {
                   </td>
                   <td className="px-4 py-3">
                     {showManagerField ? (
-                      <select
-                        value={currentManagerId}
+                      <select value={currentManagerId}
                         onChange={e => setEdit(user.id, 'manager_id', e.target.value, user)}
                         className="input py-1.5 w-44">
                         <option value="">— Fara superior —</option>
@@ -377,15 +416,11 @@ export default function UsersPage() {
                   </td>
                   <td className="px-4 py-3">
                     <button
-                      onClick={() => {
-                        setPasswordModal({ open: true, user })
-                        setNewPassword('')
-                        setShowNewPass(false)
-                      }}
+                      onClick={() => openCredModal(user)}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-xs font-medium hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-all"
                     >
                       <KeyRound size={13} />
-                      Reseteaza
+                      Email / Parola
                     </button>
                   </td>
                   <td className="px-4 py-3">
