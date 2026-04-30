@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import toast from 'react-hot-toast'
 import { Save, Trash2, UserPlus, X, Eye, EyeOff } from 'lucide-react'
-import { cn } from '@/lib/utils'
 
 const ROLURI = [
   { value: 'employee', label: 'Angajat' },
@@ -12,8 +11,8 @@ const ROLURI = [
   { value: 'admin', label: 'Administrator' },
 ]
 
-// Rolurile care pot fi asignate unui manager
-const ROLURI_CU_MANAGER = ['employee', 'admin', 'director']
+// Toti pot avea manager (mai putin directorul)
+const ROLURI_CU_MANAGER = ['employee', 'manager', 'admin']
 
 export default function UsersPage() {
   const [users, setUsers] = useState<any[]>([])
@@ -38,7 +37,10 @@ export default function UsersPage() {
     setLoading(false)
   }
 
-  const managers = users.filter(u => u.role === 'manager')
+  // Managerii posibili = toti cu rol manager (mai putin userul insusi)
+  const getPosibiliManageri = (excludeId?: string) => {
+    return users.filter(u => u.role === 'manager' && u.id !== excludeId)
+  }
 
   const handleSave = async (user: any) => {
     const edit = edits[user.id]
@@ -129,6 +131,11 @@ export default function UsersPage() {
     }))
   }
 
+  const getManagerName = (managerId: string) => {
+    const m = users.find(u => u.id === managerId)
+    return m?.name || '—'
+  }
+
   if (loading) return <div className="p-8 text-slate-400">Se incarca...</div>
 
   return (
@@ -142,6 +149,13 @@ export default function UsersPage() {
           <UserPlus size={16} />
           Adauga utilizator
         </button>
+      </div>
+
+      {/* Info ierarhie */}
+      <div className="card p-4 mb-6 bg-blue-50 border-blue-100 text-sm text-blue-800">
+        <strong>Ierarhie:</strong> Un manager poate fi subordonat altui manager.
+        Managerul de nivel superior vede automat intreaga echipa recursiv (subordonatii subordonatilor).
+        Directorul vede pe toata lumea indiferent de ierarhie.
       </div>
 
       {showForm && (
@@ -188,10 +202,13 @@ export default function UsersPage() {
             </div>
             {ROLURI_CU_MANAGER.includes(newUser.role) && (
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Manager</label>
-                <select value={newUser.manager_id} onChange={e => setNewUser({ ...newUser, manager_id: e.target.value })} className="input">
+                <label className="block text-xs font-medium text-slate-600 mb-1">Manager direct</label>
+                <select value={newUser.manager_id}
+                  onChange={e => setNewUser({ ...newUser, manager_id: e.target.value })} className="input">
                   <option value="">— Fara manager —</option>
-                  {managers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  {getPosibiliManageri().map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
                 </select>
               </div>
             )}
@@ -213,7 +230,7 @@ export default function UsersPage() {
               <th className="text-left px-4 py-3 font-medium text-slate-500">Nume</th>
               <th className="text-left px-4 py-3 font-medium text-slate-500">Rol</th>
               <th className="text-left px-4 py-3 font-medium text-slate-500">ID Angajat</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-500">Manager</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-500">Manager direct</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -222,6 +239,8 @@ export default function UsersPage() {
               const edit = edits[user.id]
               const currentRole = edit?.role ?? user.role
               const showManagerField = ROLURI_CU_MANAGER.includes(currentRole)
+              const currentManagerId = edit?.manager_id ?? String(user.manager_id || '')
+
               return (
                 <tr key={user.id} className="border-b border-slate-50 hover:bg-slate-50">
                   <td className="px-4 py-3">
@@ -253,13 +272,15 @@ export default function UsersPage() {
                   <td className="px-4 py-3">
                     {showManagerField ? (
                       <select
-                        value={edit?.manager_id ?? String(user.manager_id || '')}
+                        value={currentManagerId}
                         onChange={e => setEdit(user.id, 'manager_id', e.target.value, user)}
-                        className="input py-1.5 w-40">
-                        <option value="">— Fara —</option>
-                        {managers
-                          .filter(m => m.id !== user.id)
-                          .map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        className="input py-1.5 w-44">
+                        <option value="">— Fara manager —</option>
+                        {getPosibiliManageri(user.id).map(m => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
                       </select>
                     ) : (
                       <span className="text-slate-300 text-xs">—</span>
