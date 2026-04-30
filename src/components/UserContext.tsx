@@ -22,26 +22,54 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const load = async () => {
-      const { data: { user: authUser } } = await supabase.auth.getUser()
-      if (!authUser) return
+      // Incearca din cache mai intai
+      const cached = sessionStorage.getItem('pontaj_user')
+      if (cached) {
+        try {
+          setUser(JSON.parse(cached))
+        } catch {}
+      }
 
-      const { data } = await supabase
+      // Fetch din Supabase
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      if (!authUser) {
+        sessionStorage.removeItem('pontaj_user')
+        setUser(null)
+        return
+      }
+
+      const { data, error } = await supabase
         .from('app_users')
         .select('*')
         .eq('id', authUser.id)
         .single()
 
       if (data) {
-        setUser({
+        const info: UserInfo = {
           id: authUser.id,
           name: data.name || authUser.email || '',
           email: authUser.email || '',
           role: data.role || '',
           employee_id: data.employee_id || null
-        })
+        }
+        setUser(info)
+        sessionStorage.setItem('pontaj_user', JSON.stringify(info))
       }
     }
+
     load()
+
+    // Asculta schimbarile de autentificare
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        sessionStorage.removeItem('pontaj_user')
+        setUser(null)
+      } else if (event === 'SIGNED_IN') {
+        load()
+      }
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
   return (
