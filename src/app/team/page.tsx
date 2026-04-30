@@ -25,10 +25,10 @@ export default function TeamPage() {
   const router = useRouter()
   const supabase = createClient()
   const [currentUser, setCurrentUser] = useState<any>(null)
-  const [directTeam, setDirectTeam] = useState<any[]>([])       // echipa directa
-  const [subManagers, setSubManagers] = useState<any[]>([])      // managerii subordonati
-  const [subManagerTeams, setSubManagerTeams] = useState<Record<string, any[]>>({}) // echipa fiecarui submanager
-  const [allMembers, setAllMembers] = useState<any[]>([])        // toti membrii (pentru director)
+  const [directTeam, setDirectTeam] = useState<any[]>([])
+  const [subManagers, setSubManagers] = useState<any[]>([])
+  const [subManagerTeams, setSubManagerTeams] = useState<Record<string, any[]>>({})
+  const [allMembers, setAllMembers] = useState<any[]>([])
   const [summaries, setSummaries] = useState<MemberSummary[]>([])
   const [selected, setSelected] = useState<any>(null)
   const [timesheets, setTimesheets] = useState<any[]>([])
@@ -56,7 +56,6 @@ export default function TeamPage() {
       setCurrentUser(u)
 
       if (u.role === 'director') {
-        // Director vede toata lumea
         const { data } = await supabase
           .from('app_users')
           .select('*')
@@ -66,7 +65,7 @@ export default function TeamPage() {
         setAllMembers(members)
         await loadSummaries(members, from, to)
       } else {
-        // Manager — echipa directa
+        // Toti cei cu manager_id = id-ul meu (echipa directa)
         const { data: directData } = await supabase
           .from('app_users')
           .select('*')
@@ -75,11 +74,11 @@ export default function TeamPage() {
 
         const direct = directData || []
 
-        // Separa managerii subordonati de angajatii directi
-        const subMgrs = direct.filter((m: any) => m.role === 'manager')
-        const directEmployees = direct.filter((m: any) => m.role !== 'manager')
+        // Toti din echipa directa apar in "Echipa mea directa"
+        setDirectTeam(direct)
 
-        setDirectTeam(directEmployees)
+        // Managerii din echipa directa apar si in sectiunea expandabila
+        const subMgrs = direct.filter((m: any) => m.role === 'manager')
         setSubManagers(subMgrs)
 
         // Incarca echipa fiecarui submanager
@@ -101,10 +100,9 @@ export default function TeamPage() {
         }
         setSubManagerTeams(teams)
 
-        // Toti membrii pentru sumar
-        const allDirect = [...directEmployees, ...subMgrs]
+        // Toti membrii unici pentru sumar
         const allSubordinates = Object.values(teams).flat()
-        const uniqueMembers = [...allDirect, ...allSubordinates].filter(
+        const uniqueMembers = [...direct, ...allSubordinates].filter(
           (m, i, arr) => arr.findIndex(x => x.id === m.id) === i
         )
         await loadSummaries(uniqueMembers, from, to)
@@ -175,7 +173,7 @@ export default function TeamPage() {
     } else {
       const allM = currentUser?.role === 'director'
         ? allMembers
-        : [...directTeam, ...subManagers, ...Object.values(subManagerTeams).flat()].filter(
+        : [...directTeam, ...Object.values(subManagerTeams).flat()].filter(
             (m, i, arr) => arr.findIndex(x => x.id === m.id) === i
           )
       await loadSummaries(allM, f, t)
@@ -221,7 +219,6 @@ export default function TeamPage() {
     </div>
   )
 
-  // Card pentru un membru
   const MemberCard = ({ member }: { member: any }) => {
     const s = getSummary(member.id)
     const areProbleme = (s?.diffMin || 0) < -15
@@ -246,7 +243,14 @@ export default function TeamPage() {
             {member.name?.charAt(0)?.toUpperCase() || '?'}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-medium text-slate-900 truncate text-sm">{member.name}</p>
+            <div className="flex items-center gap-1.5">
+              <p className="font-medium text-slate-900 truncate text-sm">{member.name}</p>
+              {member.role === 'manager' && (
+                <span className="text-xs px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium shrink-0">
+                  Manager
+                </span>
+              )}
+            </div>
             <p className="text-xs text-slate-400">{s ? `${s.zile} zile` : '—'}</p>
           </div>
         </div>
@@ -289,7 +293,7 @@ export default function TeamPage() {
                 setFrom(f); setTo(t)
                 const allM = currentUser?.role === 'director'
                   ? allMembers
-                  : [...directTeam, ...subManagers, ...Object.values(subManagerTeams).flat()].filter(
+                  : [...directTeam, ...Object.values(subManagerTeams).flat()].filter(
                       (m, i, arr) => arr.findIndex(x => x.id === m.id) === i
                     )
                 await loadSummaries(allM, f, t)
@@ -367,7 +371,7 @@ export default function TeamPage() {
               </div>
             )}
 
-            {/* Director: toti membrii flat */}
+            {/* Director: toti flat */}
             {currentUser?.role === 'director' && (
               <div>
                 <h2 className="font-semibold text-slate-700 text-sm mb-3">Toate persoanele</h2>
@@ -383,11 +387,11 @@ export default function TeamPage() {
               </div>
             )}
 
-            {/* Manager: ierarhie clara */}
+            {/* Manager: ierarhie */}
             {currentUser?.role === 'manager' && (
               <div className="space-y-8">
 
-                {/* Echipa directa */}
+                {/* Echipa directa — toti cei cu manager_id = id-ul meu */}
                 {directTeam.length > 0 && (
                   <div>
                     <div className="flex items-center gap-2 mb-3">
@@ -409,13 +413,13 @@ export default function TeamPage() {
                   </div>
                 )}
 
-                {/* Managerii subordonati si echipele lor */}
+                {/* Managerii subordonati cu echipele lor expandabile */}
                 {subManagers.length > 0 && (
                   <div>
                     <div className="flex items-center gap-2 mb-3">
                       <div className="w-1 h-5 bg-purple-500 rounded-full" />
                       <h2 className="font-semibold text-slate-900 text-sm">
-                        Manageri subordonati
+                        Echipele managerilor subordonati
                         <span className="ml-2 text-xs font-normal text-slate-400">
                           {subManagers.length} {subManagers.length === 1 ? 'manager' : 'manageri'}
                         </span>
@@ -431,7 +435,6 @@ export default function TeamPage() {
 
                         return (
                           <div key={mgr.id} className="card border border-purple-100 overflow-hidden">
-                            {/* Header manager */}
                             <div className="flex items-center gap-3 p-4 bg-purple-50">
                               <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-semibold text-sm shrink-0">
                                 {mgr.name?.charAt(0)?.toUpperCase() || '?'}
@@ -448,14 +451,16 @@ export default function TeamPage() {
                                   {mgrSummary && (
                                     <span className={cn(
                                       'ml-2 font-medium',
-                                      areProbleme ? 'text-red-500' : esteAvans ? 'text-blue-500' : 'text-green-500'
+                                      areProbleme ? 'text-red-500'
+                                        : esteAvans ? 'text-blue-500'
+                                        : 'text-green-500'
                                     )}>
-                                      · {formatBilant(mgrSummary.diffMin)}
+                                      · bilant propriu: {formatBilant(mgrSummary.diffMin)}
                                     </span>
                                   )}
                                 </p>
                               </div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 shrink-0">
                                 <button
                                   onClick={() => handleSelectMember(mgr)}
                                   className="btn-secondary text-xs py-1.5"
@@ -474,7 +479,6 @@ export default function TeamPage() {
                               </div>
                             </div>
 
-                            {/* Echipa managerului */}
                             {isExpanded && mgrTeam.length > 0 && (
                               <div className="p-4 border-t border-purple-100 bg-white">
                                 <p className="text-xs text-slate-400 mb-3 font-medium">
