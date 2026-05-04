@@ -8,6 +8,8 @@ interface UserInfo {
   email: string
   role: string
   employee_id: number | null
+  terms_accepted: boolean
+  terms_accepted_at: string | null
 }
 
 const UserContext = createContext<UserInfo | null>(null)
@@ -22,7 +24,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const load = async () => {
-      // Incearca din cache mai intai
       const cached = sessionStorage.getItem('pontaj_user')
       if (cached) {
         try {
@@ -30,7 +31,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         } catch {}
       }
 
-      // Fetch din Supabase
       const { data: { user: authUser } } = await supabase.auth.getUser()
       if (!authUser) {
         sessionStorage.removeItem('pontaj_user')
@@ -38,7 +38,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         return
       }
 
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('app_users')
         .select('*')
         .eq('id', authUser.id)
@@ -50,7 +50,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           name: data.name || authUser.email || '',
           email: authUser.email || '',
           role: data.role || '',
-          employee_id: data.employee_id || null
+          employee_id: data.employee_id || null,
+          terms_accepted: data.terms_accepted || false,
+          terms_accepted_at: data.terms_accepted_at || null
         }
         setUser(info)
         sessionStorage.setItem('pontaj_user', JSON.stringify(info))
@@ -59,8 +61,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
     load()
 
-    // Asculta schimbarile de autentificare
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
         sessionStorage.removeItem('pontaj_user')
         setUser(null)
@@ -71,6 +72,15 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
     return () => subscription.unsubscribe()
   }, [])
+
+  const updateUser = (updates: Partial<UserInfo>) => {
+    setUser(prev => {
+      if (!prev) return prev
+      const updated = { ...prev, ...updates }
+      sessionStorage.setItem('pontaj_user', JSON.stringify(updated))
+      return updated
+    })
+  }
 
   return (
     <UserContext.Provider value={user}>
