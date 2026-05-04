@@ -34,8 +34,12 @@ export default function DashboardPage() {
         .single()
 
       if (!u || error) { router.push('/login'); return }
-      if (u.role === 'admin' && !u.employee_id) { router.push('/admin/upload'); return }
-      if (u.role === 'manager' || u.role === 'director') { router.push('/team'); return }
+
+      // Doar adminul fara employee_id e redirectat
+      if (u.role === 'admin' && !u.employee_id) {
+        router.push('/admin/upload')
+        return
+      }
 
       setAppUser(u)
 
