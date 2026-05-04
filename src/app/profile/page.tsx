@@ -4,8 +4,10 @@ import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/components/UserContext'
 import Sidebar from '@/components/Sidebar'
 import toast from 'react-hot-toast'
-import { Eye, EyeOff, Save, ArrowLeft, User, Mail, CreditCard, Shield } from 'lucide-react'
+import { Eye, EyeOff, Save, ArrowLeft, User, Mail, CreditCard, Shield, FileText, CheckCircle2, XCircle } from 'lucide-react'
 import Link from 'next/link'
+import { format, parseISO } from 'date-fns'
+import { ro } from 'date-fns/locale'
 
 export default function ProfilePage() {
   const user = useUser()
@@ -142,6 +144,45 @@ export default function ProfilePage() {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Termeni si conditii */}
+          <div className="card p-6 mb-6">
+            <h2 className="text-base font-semibold text-slate-900 mb-4 flex items-center gap-2">
+              <FileText size={18} className="text-slate-400" />
+              Termeni și Condiții
+            </h2>
+
+            <div className={`flex items-start gap-4 p-4 rounded-xl border ${
+              user?.terms_accepted
+                ? 'bg-green-50 border-green-100'
+                : 'bg-red-50 border-red-100'
+            }`}>
+              <div className="shrink-0 mt-0.5">
+                {user?.terms_accepted
+                  ? <CheckCircle2 size={20} className="text-green-600" />
+                  : <XCircle size={20} className="text-red-500" />
+                }
+              </div>
+              <div className="flex-1">
+                <p className={`font-medium text-sm ${
+                  user?.terms_accepted ? 'text-green-800' : 'text-red-700'
+                }`}>
+                  {user?.terms_accepted ? 'Termeni acceptați' : 'Termeni neacceptați'}
+                </p>
+                {user?.terms_accepted && user?.terms_accepted_at && (
+                  <p className="text-green-600 text-xs mt-0.5">
+                    Acceptat pe {format(parseISO(user.terms_accepted_at), 'dd MMM yyyy, HH:mm', { locale: ro })}
+                  </p>
+                )}
+              </div>
+              <Link
+                href="/terms"
+                className="text-xs text-blue-600 hover:text-blue-700 font-medium shrink-0"
+              >
+                Citește termenii →
+              </Link>
             </div>
           </div>
 
