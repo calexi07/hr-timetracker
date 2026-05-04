@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Shield, X, FileText, AlertTriangle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
+import Link from 'next/link'
 
 interface Props {
   onAccept: () => void
@@ -11,15 +12,8 @@ interface Props {
 
 export default function TermsModal({ onAccept }: Props) {
   const [loading, setLoading] = useState(false)
-  const [scrolled, setScrolled] = useState(false)
   const supabase = createClient()
   const router = useRouter()
-
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const el = e.currentTarget
-    const atBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 50
-    if (atBottom) setScrolled(true)
-  }
 
   const handleAccept = async () => {
     setLoading(true)
@@ -51,6 +45,11 @@ export default function TermsModal({ onAccept }: Props) {
     router.push('/login?denied=true')
   }
 
+  const handleClose = async () => {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
@@ -58,14 +57,24 @@ export default function TermsModal({ onAccept }: Props) {
 
         {/* Header */}
         <div className="p-6 border-b border-slate-100 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
-              <FileText size={18} className="text-blue-600" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
+                <FileText size={18} className="text-blue-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Termeni și Condiții</h2>
+                <p className="text-slate-400 text-xs">Pontaj HR — Krka Romania</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">Termeni și Condiții</h2>
-              <p className="text-slate-400 text-xs">Pontaj HR — Krka Romania</p>
-            </div>
+            <button
+              onClick={handleClose}
+              disabled={loading}
+              className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
+              title="Inchide si deconecteaza"
+            >
+              <X size={18} />
+            </button>
           </div>
         </div>
 
@@ -84,10 +93,7 @@ export default function TermsModal({ onAccept }: Props) {
         </div>
 
         {/* Continut scrollabil */}
-        <div
-          onScroll={handleScroll}
-          className="flex-1 overflow-y-auto px-6 py-4 space-y-4 text-sm text-slate-600 leading-relaxed"
-        >
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 text-sm text-slate-600 leading-relaxed">
           <div>
             <h3 className="font-semibold text-slate-900 mb-1">1. Scopul aplicației</h3>
             <p>
@@ -123,7 +129,7 @@ export default function TermsModal({ onAccept }: Props) {
 
           <div>
             <h3 className="font-semibold text-slate-900 mb-1">3. Limitări tehnice și bug-uri</h3>
-            <p className="mb-2">
+            <p>
               Aplicația este în stadiu de dezvoltare activă și poate conține erori operaționale
               sau funcționale. Krka Romania nu garantează disponibilitatea continuă, acuratețea
               100% a calculelor sau absența completă a erorilor de afișare.
@@ -157,11 +163,12 @@ export default function TermsModal({ onAccept }: Props) {
             </p>
           </div>
 
-          {!scrolled && (
-            <div className="text-center py-2">
-              <p className="text-xs text-slate-400">↓ Derulează în jos pentru a citi toți termenii</p>
-            </div>
-          )}
+          <div className="pt-2">
+            <Link href="/terms" target="_blank"
+              className="text-xs text-blue-600 hover:text-blue-700 underline">
+              Citește termenii completi →
+            </Link>
+          </div>
         </div>
 
         {/* Butoane */}
@@ -189,8 +196,8 @@ export default function TermsModal({ onAccept }: Props) {
             </button>
           </div>
           <p className="text-xs text-slate-400 text-center mt-3">
-            Prin apasarea "Accept termenii" confirmi ca ai citit si esti de acord cu termenii si conditiile de utilizare.
-            Daca refuzi, vei fi deconectat automat.
+            Prin apasarea "Accept termenii" confirmi ca ai citit si esti de acord cu termenii si conditiile.
+            Daca refuzi sau inchizi, vei fi deconectat automat.
           </p>
         </div>
       </div>
