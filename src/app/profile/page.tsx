@@ -1,17 +1,15 @@
 'use client'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
 import { useUser } from '@/components/UserContext'
 import Sidebar from '@/components/Sidebar'
 import toast from 'react-hot-toast'
-import { Eye, EyeOff, Save, ArrowLeft, User, Mail, IdCard, Shield } from 'lucide-react'
+import { Eye, EyeOff, Save, ArrowLeft, User, Mail, CreditCard, Shield } from 'lucide-react'
 import Link from 'next/link'
 
 export default function ProfilePage() {
   const user = useUser()
   const supabase = createClient()
-  const router = useRouter()
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -38,28 +36,27 @@ export default function ProfilePage() {
     e.preventDefault()
 
     if (!currentPassword) {
-      toast.error('Introdu parola curenta')
+      toast.error('Introdu PIN-ul curent')
       return
     }
 
     if (newPassword.length < 6) {
-      toast.error('Parola noua trebuie sa aiba minimum 6 caractere')
+      toast.error('PIN-ul nou trebuie sa aiba minimum 6 caractere')
       return
     }
 
     if (newPassword !== confirmPassword) {
-      toast.error('Parolele nu coincid')
+      toast.error('PIN-urile nu coincid')
       return
     }
 
     if (currentPassword === newPassword) {
-      toast.error('Parola noua trebuie sa fie diferita de cea curenta')
+      toast.error('PIN-ul nou trebuie sa fie diferit de cel curent')
       return
     }
 
     setSaving(true)
 
-    // Verifica parola curenta prin re-autentificare
     const { data: { user: authUser } } = await supabase.auth.getUser()
     if (!authUser?.email) {
       toast.error('Eroare la obtinerea datelor utilizatorului')
@@ -73,18 +70,17 @@ export default function ProfilePage() {
     })
 
     if (signInError) {
-      toast.error('Parola curenta este incorecta')
+      toast.error('PIN-ul curent este incorect')
       setSaving(false)
       return
     }
 
-    // Schimba parola
     const { error } = await supabase.auth.updateUser({ password: newPassword })
 
     if (error) {
-      toast.error('Eroare la schimbarea parolei: ' + error.message)
+      toast.error('Eroare la schimbarea PIN-ului: ' + error.message)
     } else {
-      toast.success('Parola a fost schimbata cu succes!')
+      toast.success('PIN-ul a fost schimbat cu succes!')
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
@@ -99,7 +95,6 @@ export default function ProfilePage() {
       <main className="flex-1 overflow-auto p-8">
         <div className="max-w-2xl mx-auto">
 
-          {/* Header */}
           <div className="flex items-center gap-3 mb-8">
             <Link href="/dashboard"
               className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-900 transition-colors">
@@ -140,7 +135,7 @@ export default function ProfilePage() {
                 </div>
 
                 <div className="flex items-center gap-3 p-3 rounded-xl border border-slate-100">
-                  <IdCard size={16} className="text-slate-400 shrink-0" />
+                  <CreditCard size={16} className="text-slate-400 shrink-0" />
                   <div>
                     <p className="text-xs text-slate-400 font-medium">ID Angajat</p>
                     <p className="text-sm text-slate-900">{user?.employee_id || '—'}</p>
@@ -150,7 +145,7 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* Schimba parola */}
+          {/* Schimba PIN */}
           <div className="card p-6">
             <h2 className="text-base font-semibold text-slate-900 mb-1 flex items-center gap-2">
               <Shield size={18} className="text-slate-400" />
