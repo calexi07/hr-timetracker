@@ -32,9 +32,9 @@ export default function DashboardPage() {
         .select('*')
         .eq('id', user.id)
         .single()
-
-      if (!u || error) { router.push('/login'); return }
-      if (u.role === 'admin') { router.push('/admin/upload'); return }
+if (!u || error) { router.push('/login'); return }
+if (u.role === 'admin') { router.push('/admin/upload'); return }
+if (u.role === 'manager' || u.role === 'director') { router.push('/team'); return }
 
       setAppUser(u)
 
