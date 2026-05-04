@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatHours, cn } from '@/lib/utils'
 import { Clock, Calendar, TrendingUp, Award, AlertTriangle } from 'lucide-react'
-import { format, startOfMonth, startOfWeek } from 'date-fns'
+import { format, startOfMonth, startOfWeek, subMonths, endOfMonth } from 'date-fns'
 import TimesheetTable from '@/components/TimesheetTable'
 import DateFilter from '@/components/DateFilter'
 import HoursChart from '@/components/charts/HoursChart'
@@ -19,8 +19,8 @@ export default function DashboardPage() {
   const [appUser, setAppUser] = useState<any>(null)
   const [timesheets, setTimesheets] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [from, setFrom] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'))
-  const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [from, setFrom] = useState(format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd'))
+  const [to, setTo] = useState(format(endOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd'))
 
   useEffect(() => {
     const init = async () => {
@@ -32,10 +32,10 @@ export default function DashboardPage() {
         .select('*')
         .eq('id', user.id)
         .single()
-if (!u || error) { router.push('/login'); return }
-// Adminul poate accesa dashboard-ul daca are employee_id
-if (u.role === 'admin' && !u.employee_id) { router.push('/admin/upload'); return }
-if (u.role === 'manager' || u.role === 'director') { router.push('/team'); return }
+
+      if (!u || error) { router.push('/login'); return }
+      if (u.role === 'admin' && !u.employee_id) { router.push('/admin/upload'); return }
+      if (u.role === 'manager' || u.role === 'director') { router.push('/team'); return }
 
       setAppUser(u)
 
@@ -128,6 +128,7 @@ if (u.role === 'manager' || u.role === 'director') { router.push('/team'); retur
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+
               <div className="card p-6 bg-blue-50 border-blue-100">
                 <div className="flex items-start justify-between">
                   <div>
@@ -205,6 +206,7 @@ if (u.role === 'manager' || u.role === 'director') { router.push('/team'); retur
                   </div>
                 </div>
               </div>
+
             </div>
 
             <div className="card p-6 mb-8">
