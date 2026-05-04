@@ -40,7 +40,6 @@ export default function Sidebar() {
 
   return (
     <aside className="w-64 min-h-screen bg-blue-900 flex flex-col sticky top-0 h-screen">
-      {/* Logo */}
       <div className="p-6 border-b border-blue-700 shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-blue-500 flex items-center justify-center">
@@ -53,7 +52,6 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* Nav */}
       <nav className="p-4 space-y-1 shrink-0">
         {navItems.map(item => {
           const active = pathname === item.href || pathname.startsWith(item.href + '/')
@@ -74,13 +72,20 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Separator */}
       <div className="mx-4 border-t border-blue-700/50" />
 
-      {/* User info — imediat dupa nav */}
       <div className="p-4 shrink-0">
-        <div className="flex items-center gap-3 px-3 py-2.5 bg-blue-800/50 rounded-xl mb-2">
-          <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-semibold shrink-0">
+        {/* Nume clickabil -> profil */}
+        <Link
+          href="/profile"
+          className={cn(
+            'flex items-center gap-3 px-3 py-2.5 rounded-xl mb-2 transition-all group',
+            pathname === '/profile'
+              ? 'bg-blue-500'
+              : 'bg-blue-800/50 hover:bg-blue-700/50'
+          )}
+        >
+          <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-semibold shrink-0 group-hover:bg-blue-400 transition-all">
             {initials}
           </div>
           <div className="flex-1 min-w-0">
@@ -90,7 +95,9 @@ export default function Sidebar() {
               <span className="text-blue-400 text-xs">{getRolLabel()}</span>
             </div>
           </div>
-        </div>
+          <ChevronRight size={13} className="text-blue-400 group-hover:text-blue-200 shrink-0" />
+        </Link>
+
         <button
           onClick={handleLogout}
           className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-blue-300 hover:text-white hover:bg-blue-800 text-sm transition-all"
