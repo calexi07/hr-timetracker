@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import toast from 'react-hot-toast'
-import { Save, Trash2, UserPlus, X, Eye, EyeOff, KeyRound } from 'lucide-react'
+import { Save, Trash2, UserPlus, X, Eye, EyeOff, KeyRound, RotateCcw, CheckCircle2, XCircle } from 'lucide-react'
 
 const ROLURI = [
   { value: 'employee', label: 'Angajat' },
@@ -18,6 +18,8 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [resettingConsent, setResettingConsent] = useState<string | null>(null)
+  const [resettingAll, setResettingAll] = useState(false)
   const [edits, setEdits] = useState<Record<string, { role: string; employee_id: string; name: string; manager_id: string }>>({})
   const [showForm, setShowForm] = useState(false)
   const [showPass, setShowPass] = useState(false)
@@ -138,19 +140,16 @@ export default function UsersPage() {
 
   const handleUpdateCredentials = async () => {
     if (!credModal.user) return
-
     if (newPassword && newPassword.length < 6) {
       toast.error('Parola trebuie sa aiba minimum 6 caractere')
       return
     }
-
     if (!newEmail) {
       toast.error('Emailul nu poate fi gol')
       return
     }
 
     setResetting(true)
-
     const payload: any = { userId: credModal.user.id }
     if (newEmail !== credModal.user.email) payload.email = newEmail
     if (newPassword) payload.password = newPassword
@@ -180,6 +179,46 @@ export default function UsersPage() {
       closeCredModal()
     }
     setResetting(false)
+  }
+
+  const handleResetConsent = async (user: any) => {
+    if (!confirm(`Resetezi acceptul termenilor pentru ${user.name}? La urmatoarea conectare va trebui sa accepte din nou.`)) return
+    setResettingConsent(user.id)
+
+    const res = await fetch('/api/users/reset-consent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.id })
+    })
+
+    if (!res.ok) {
+      toast.error('Eroare la resetare')
+    } else {
+      toast.success(`Consimtamantul lui ${user.name} a fost resetat`)
+      setUsers(prev => prev.map(u =>
+        u.id === user.id ? { ...u, terms_accepted: false, terms_accepted_at: null } : u
+      ))
+    }
+    setResettingConsent(null)
+  }
+
+  const handleResetAllConsent = async () => {
+    if (!confirm('Resetezi acceptul termenilor pentru TOTI utilizatorii? La urmatoarea conectare vor trebui sa accepte din nou.')) return
+    setResettingAll(true)
+
+    const res = await fetch('/api/users/reset-consent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ all: true })
+    })
+
+    if (!res.ok) {
+      toast.error('Eroare la resetare')
+    } else {
+      toast.success('Consimtamantul tuturor utilizatorilor a fost resetat')
+      setUsers(prev => prev.map(u => ({ ...u, terms_accepted: false, terms_accepted_at: null })))
+    }
+    setResettingAll(false)
   }
 
   const setEdit = (userId: string, field: string, value: string, user: any) => {
@@ -221,30 +260,19 @@ export default function UsersPage() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Adresa de email
-                </label>
-                <input
-                  type="email"
-                  value={newEmail}
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Adresa de email</label>
+                <input type="email" value={newEmail}
                   onChange={e => setNewEmail(e.target.value)}
-                  className="input"
-                  placeholder="email@krka.biz"
-                />
+                  className="input" placeholder="email@krka.biz" />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">
                   Parola noua <span className="text-slate-400 font-normal">(lasa gol pentru a nu schimba)</span>
                 </label>
                 <div className="relative">
-                  <input
-                    type={showNewPass ? 'text' : 'password'}
-                    value={newPassword}
+                  <input type={showNewPass ? 'text' : 'password'} value={newPassword}
                     onChange={e => setNewPassword(e.target.value)}
-                    placeholder="minimum 6 caractere"
-                    className="input pr-10"
-                  />
+                    placeholder="minimum 6 caractere" className="input pr-10" />
                   <button type="button" onClick={() => setShowNewPass(!showNewPass)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                     {showNewPass ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -256,7 +284,7 @@ export default function UsersPage() {
             <div className="flex gap-3 mt-5">
               <button onClick={handleUpdateCredentials} disabled={resetting}
                 className="btn-primary flex-1 justify-center">
-                {resetting ? 'Se salveaza...' : <><KeyRound size={15} />Salveaza modificarile</>}
+                {resetting ? 'Se salveaza...' : <><KeyRound size={15} />Salveaza</>}
               </button>
               <button onClick={closeCredModal} className="btn-secondary flex-1 justify-center">
                 Anuleaza
@@ -271,10 +299,20 @@ export default function UsersPage() {
           <h1 className="text-2xl font-bold text-slate-900">Gestionare angajati</h1>
           <p className="text-slate-500 mt-1">Adauga, editeaza sau sterge conturi. Asigneaza manageri si roluri.</p>
         </div>
-        <button onClick={() => setShowForm(!showForm)} className="btn-primary">
-          <UserPlus size={16} />
-          Adauga utilizator
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleResetAllConsent}
+            disabled={resettingAll}
+            className="btn-secondary text-amber-600 border-amber-200 hover:bg-amber-50 text-sm"
+          >
+            <RotateCcw size={14} />
+            {resettingAll ? 'Se reseteaza...' : 'Reseteaza consimtamant toti'}
+          </button>
+          <button onClick={() => setShowForm(!showForm)} className="btn-primary">
+            <UserPlus size={16} />
+            Adauga utilizator
+          </button>
+        </div>
       </div>
 
       <div className="card p-4 mb-6 bg-blue-50 border-blue-100 text-sm text-blue-800">
@@ -358,7 +396,8 @@ export default function UsersPage() {
               <th className="text-left px-4 py-3 font-medium text-slate-500">Nume</th>
               <th className="text-left px-4 py-3 font-medium text-slate-500">Rol</th>
               <th className="text-left px-4 py-3 font-medium text-slate-500">ID Angajat</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-500">Superior direct</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-500">Superior</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-500">Termeni</th>
               <th className="text-left px-4 py-3 font-medium text-slate-500">Credentiale</th>
               <th className="px-4 py-3" />
             </tr>
@@ -383,12 +422,12 @@ export default function UsersPage() {
                   <td className="px-4 py-3">
                     <input type="text" value={edit?.name ?? user.name ?? ''}
                       onChange={e => setEdit(user.id, 'name', e.target.value, user)}
-                      className="input py-1.5 w-40" />
+                      className="input py-1.5 w-36" />
                   </td>
                   <td className="px-4 py-3">
                     <select value={currentRole}
                       onChange={e => setEdit(user.id, 'role', e.target.value, user)}
-                      className="input py-1.5 w-36">
+                      className="input py-1.5 w-32">
                       {ROLURI.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                     </select>
                   </td>
@@ -396,17 +435,17 @@ export default function UsersPage() {
                     <input type="number" placeholder="ex: 21"
                       value={edit?.employee_id ?? String(user.employee_id || '')}
                       onChange={e => setEdit(user.id, 'employee_id', e.target.value, user)}
-                      className="input py-1.5 w-24" />
+                      className="input py-1.5 w-20" />
                   </td>
                   <td className="px-4 py-3">
                     {showManagerField ? (
                       <select value={currentManagerId}
                         onChange={e => setEdit(user.id, 'manager_id', e.target.value, user)}
-                        className="input py-1.5 w-44">
-                        <option value="">— Fara superior —</option>
+                        className="input py-1.5 w-36">
+                        <option value="">— Fara —</option>
                         {getPosibiliManageri(user.id).map(m => (
                           <option key={m.id} value={m.id}>
-                            {m.name} ({m.role === 'director' ? 'Director' : 'Manager'})
+                            {m.name}
                           </option>
                         ))}
                       </select>
@@ -415,12 +454,32 @@ export default function UsersPage() {
                     )}
                   </td>
                   <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      {user.terms_accepted ? (
+                        <CheckCircle2 size={14} className="text-green-500 shrink-0" />
+                      ) : (
+                        <XCircle size={14} className="text-red-400 shrink-0" />
+                      )}
+                      <button
+                        onClick={() => handleResetConsent(user)}
+                        disabled={resettingConsent === user.id || !user.terms_accepted}
+                        title="Reseteaza consimtamant"
+                        className="p-1 rounded-lg text-slate-300 hover:text-amber-600 hover:bg-amber-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        {resettingConsent === user.id
+                          ? <span className="text-xs">...</span>
+                          : <RotateCcw size={13} />
+                        }
+                      </button>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
                     <button
                       onClick={() => openCredModal(user)}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-xs font-medium hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-all"
                     >
                       <KeyRound size={13} />
-                      Email / Parola
+                      Email / PIN
                     </button>
                   </td>
                   <td className="px-4 py-3">
