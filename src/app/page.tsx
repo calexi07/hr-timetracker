@@ -10,20 +10,18 @@ export default function Home() {
   useEffect(() => {
     const check = async () => {
       const { data: { user } } = await supabase.auth.getUser()
-      
-      if (!user) {
-        router.push('/login')
-        return
-      }
+      if (!user) { router.push('/login'); return }
 
-      const { data: appUser } = await supabase
+      const { data: u } = await supabase
         .from('app_users')
-        .select('role')
+        .select('role, employee_id')
         .eq('id', user.id)
         .single()
 
-      if (appUser?.role === 'admin') {
-        router.push('/admin/upload')
+      if (!u) { router.push('/login'); return }
+
+      if (u.role === 'manager' || u.role === 'director') {
+        router.push('/team')
       } else {
         router.push('/dashboard')
       }
