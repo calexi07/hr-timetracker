@@ -27,13 +27,14 @@ export default function DashboardPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
 
-      const { data: u } = await supabase
+      const { data: u, error } = await supabase
         .from('app_users')
         .select('*')
         .eq('id', user.id)
         .single()
 
-      if (!u) { router.push('/login'); return }
+      if (!u || error) { router.push('/login'); return }
+      if (u.role === 'admin') { router.push('/admin/upload'); return }
 
       setAppUser(u)
 
@@ -47,13 +48,18 @@ export default function DashboardPage() {
   }, [])
 
   const loadTimesheets = async (employeeId: number, f: string, t: string) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('timesheets')
       .select('*')
       .eq('employee_id', Number(employeeId))
       .gte('date', f)
       .lte('date', t)
       .order('date', { ascending: false })
+
+    if (error) {
+      console.error('Timesheet error:', error)
+      return
+    }
     setTimesheets(data || [])
   }
 
@@ -78,11 +84,9 @@ export default function DashboardPage() {
   const weekHours = timesheets.filter(r => r.date >= weekStart).reduce((s, r) => s + Number(r.hours_worked), 0)
   const totalNorma = daysWorked * NORMA_ZI
   const totalDiff = totalHours - totalNorma
-  const oreDeRecuperat = totalDiff < 0 ? Math.abs(totalDiff) : 0
-  const oreExtra = totalDiff > 0 ? totalDiff : 0
+  const totalDiffMin = Math.round(totalDiff * 60)
 
   const formatBilant = () => {
-    const totalDiffMin = Math.round(totalDiff * 60)
     const abs = Math.abs(totalDiffMin)
     const h = Math.floor(abs / 60)
     const m = abs % 60
@@ -123,7 +127,6 @@ export default function DashboardPage() {
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-
               <div className="card p-6 bg-blue-50 border-blue-100">
                 <div className="flex items-start justify-between">
                   <div>
@@ -178,30 +181,29 @@ export default function DashboardPage() {
 
               <div className={cn(
                 'card p-6 border',
-                oreDeRecuperat > 0.25 ? 'bg-red-50 border-red-100' : 'bg-green-50 border-green-100'
+                totalDiffMin < 0 ? 'bg-red-50 border-red-100' : 'bg-green-50 border-green-100'
               )}>
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="text-slate-500 text-sm font-medium">Bilant perioada</p>
                     <p className={cn('text-3xl font-bold mt-1',
-                      oreDeRecuperat > 0.25 ? 'text-red-700' : 'text-green-700'
+                      totalDiffMin < 0 ? 'text-red-700' : 'text-green-700'
                     )}>
                       {formatBilant()}
                     </p>
                     <p className="text-slate-400 text-xs mt-1">
-                      {oreDeRecuperat > 0.25 ? 'De recuperat'
-                        : oreExtra > 0.25 ? 'Ore suplimentare'
+                      {totalDiffMin < 0 ? 'De recuperat'
+                        : totalDiffMin > 0 ? 'Timp in plus'
                         : 'La norma'}
                     </p>
                   </div>
                   <div className={cn('w-11 h-11 rounded-xl flex items-center justify-center',
-                    oreDeRecuperat > 0.25 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
+                    totalDiffMin < 0 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
                   )}>
                     <AlertTriangle size={20} />
                   </div>
                 </div>
               </div>
-
             </div>
 
             <div className="card p-6 mb-8">
@@ -214,7 +216,12 @@ export default function DashboardPage() {
                 <h2 className="text-base font-semibold text-slate-900">Detalii pontaj</h2>
                 <span className="text-xs text-slate-400">{timesheets.length} inregistrari</span>
               </div>
-            <TimesheetTable timesheets={timesheets} from={from} to={to} />
+              <TimesheetTable
+                timesheets={timesheets}
+                from={from}
+                to={to}
+                employeeId={Number(appUser.employee_id)}
+              />
             </div>
           </>
         )}
