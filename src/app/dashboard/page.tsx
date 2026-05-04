@@ -33,7 +33,8 @@ export default function DashboardPage() {
         .eq('id', user.id)
         .single()
 if (!u || error) { router.push('/login'); return }
-if (u.role === 'admin') { router.push('/admin/upload'); return }
+// Adminul poate accesa dashboard-ul daca are employee_id
+if (u.role === 'admin' && !u.employee_id) { router.push('/admin/upload'); return }
 if (u.role === 'manager' || u.role === 'director') { router.push('/team'); return }
 
       setAppUser(u)
