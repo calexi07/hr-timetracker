@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import TermsModal from '@/components/TermsModal'
 import { usePathname } from 'next/navigation'
 
-const PUBLIC_PATHS = ['/login', '/terms', '/reset-password', '/update-password']
+const PUBLIC_PATHS = ['/login', '/reset-password', '/update-password']
 
 export default function TermsGuard({ children }: { children: React.ReactNode }) {
   const [checking, setChecking] = useState(true)
@@ -14,7 +14,6 @@ export default function TermsGuard({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     const check = async () => {
-      // Nu verifica pe paginile publice
       if (PUBLIC_PATHS.some(p => pathname.startsWith(p))) {
         setChecking(false)
         return
@@ -26,12 +25,10 @@ export default function TermsGuard({ children }: { children: React.ReactNode }) 
         return
       }
 
-      // Sterge cache-ul vechi care nu are terms_accepted
       const cached = sessionStorage.getItem('pontaj_user')
       if (cached) {
         try {
           const parsed = JSON.parse(cached)
-          // Daca nu are campul terms_accepted in cache, sterge cache-ul
           if (parsed.terms_accepted === undefined) {
             sessionStorage.removeItem('pontaj_user')
           }
@@ -40,14 +37,14 @@ export default function TermsGuard({ children }: { children: React.ReactNode }) 
         }
       }
 
-      // Verifica direct din Supabase
       const { data } = await supabase
         .from('app_users')
         .select('terms_accepted')
         .eq('id', user.id)
         .single()
 
-      if (!data?.terms_accepted) {
+      // Nu arata modal pe pagina de termeni
+      if (!data?.terms_accepted && !pathname.startsWith('/terms')) {
         setShowModal(true)
       }
 
