@@ -4,14 +4,14 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatHours, cn } from '@/lib/utils'
 import { format, startOfMonth } from 'date-fns'
-import { ArrowLeft, Users, Clock, AlertTriangle, CheckCircle2, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Users, AlertTriangle, CheckCircle2, ChevronRight } from 'lucide-react'
 import DateFilter from '@/components/DateFilter'
 import TimesheetTable from '@/components/TimesheetTable'
 import HoursChart from '@/components/charts/HoursChart'
 import Sidebar from '@/components/Sidebar'
 import LastUpdated from '@/components/LastUpdated'
 
-const NORMA_ZI = 8.25
+const DEFAULT_NORMA = 8.25
 
 interface MemberSummary {
   member: any
@@ -126,7 +126,8 @@ export default function TeamPage() {
       const rows = data || []
       const totalOre = rows.reduce((s: number, r: any) => s + Number(r.hours_worked), 0)
       const zile = rows.length
-      const norma = zile * NORMA_ZI
+      const normaZi = member.norma_ore ?? DEFAULT_NORMA
+      const norma = zile * normaZi
       const diffMin = Math.round((totalOre - norma) * 60)
       results.push({ member, totalOre, zile, norma, diffMin })
     }
@@ -199,8 +200,9 @@ export default function TeamPage() {
     return 'Angajat'
   }
 
+  const selectedNorma = selected?.norma_ore ?? DEFAULT_NORMA
   const totalHours = timesheets.reduce((s, r) => s + Number(r.hours_worked), 0)
-  const totalNorma = timesheets.length * NORMA_ZI
+  const totalNorma = timesheets.length * selectedNorma
   const totalDiffMin = Math.round((totalHours - totalNorma) * 60)
 
   const allSummaries = summaries
@@ -348,7 +350,7 @@ export default function TeamPage() {
                         </div>
                         <div>
                           <p className="font-medium text-slate-900 text-sm">{s.member.name}</p>
-                          <p className="text-xs text-slate-400">{getRolLabel(s.member.role)} · {s.zile} zile</p>
+                          <p className="text-xs text-slate-400">{getRolLabel(s.member.role)} · {s.zile} zile · norma {formatHours(s.member.norma_ore ?? DEFAULT_NORMA)}/zi</p>
                         </div>
                       </div>
                       <div className="text-right">
@@ -521,6 +523,9 @@ export default function TeamPage() {
                       <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-slate-100 text-slate-600">
                         {getRolLabel(selected.role)}
                       </span>
+                      <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-blue-50 text-blue-600">
+                        Norma: {formatHours(selectedNorma)}/zi
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -596,6 +601,7 @@ export default function TeamPage() {
                     from={from}
                     to={to}
                     employeeId={Number(selected.employee_id)}
+                    normaZi={selectedNorma}
                   />
                 </div>
               </>
