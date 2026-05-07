@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatHours, cn } from '@/lib/utils'
 import { Clock, Calendar, TrendingUp, Award, AlertTriangle } from 'lucide-react'
-import { format, startOfMonth, startOfWeek } from 'date-fns'
+import { format, startOfWeek, subDays } from 'date-fns'
 import TimesheetTable from '@/components/TimesheetTable'
 import DateFilter from '@/components/DateFilter'
 import HoursChart from '@/components/charts/HoursChart'
@@ -19,7 +19,7 @@ export default function DashboardPage() {
   const [appUser, setAppUser] = useState<any>(null)
   const [timesheets, setTimesheets] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [from, setFrom] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'))
+  const [from, setFrom] = useState(format(subDays(new Date(), 29), 'yyyy-MM-dd'))
   const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'))
 
   useEffect(() => {
@@ -39,12 +39,10 @@ export default function DashboardPage() {
       setAppUser(u)
 
       if (u.employee_id) {
-        const currentFrom = format(startOfMonth(new Date()), 'yyyy-MM-dd')
+        const currentFrom = format(subDays(new Date(), 29), 'yyyy-MM-dd')
         const currentTo = format(new Date(), 'yyyy-MM-dd')
         setFrom(currentFrom)
         setTo(currentTo)
-
-        console.log('Loading timesheets for:', u.employee_id, currentFrom, currentTo)
 
         const { data, error: tsError } = await supabase
           .from('timesheets')
@@ -55,8 +53,7 @@ export default function DashboardPage() {
           .order('date', { ascending: false })
           .limit(1000)
 
-        console.log('Timesheets loaded:', data?.length, tsError)
-        setTimesheets(data || [])
+        if (!tsError) setTimesheets(data || [])
       }
 
       setLoading(false)
@@ -65,7 +62,6 @@ export default function DashboardPage() {
   }, [])
 
   const loadTimesheets = async (employeeId: number, f: string, t: string) => {
-    console.log('Filter loading timesheets for:', employeeId, f, t)
     const { data, error } = await supabase
       .from('timesheets')
       .select('*')
@@ -75,12 +71,7 @@ export default function DashboardPage() {
       .order('date', { ascending: false })
       .limit(1000)
 
-    console.log('Filter timesheets loaded:', data?.length, error)
-    if (error) {
-      console.error('Timesheet error:', error)
-      return
-    }
-    setTimesheets(data || [])
+    if (!error) setTimesheets(data || [])
   }
 
   const handleFilter = async (f: string, t: string) => {
