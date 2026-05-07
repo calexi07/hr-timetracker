@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatHours, cn } from '@/lib/utils'
@@ -20,6 +20,7 @@ export default function DashboardPage() {
   const router = useRouter()
   const supabase = createClient()
   const [appUser, setAppUser] = useState<any>(null)
+  const appUserRef = useRef<any>(null)
   const [timesheets, setTimesheets] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [from, setFrom] = useState(getWeekStart())
@@ -40,6 +41,7 @@ export default function DashboardPage() {
       if (u.role === 'admin' && !u.employee_id) { router.push('/admin/upload'); return }
 
       setAppUser(u)
+      appUserRef.current = u
 
       if (u.employee_id) {
         const currentFrom = getWeekStart()
@@ -64,11 +66,17 @@ export default function DashboardPage() {
     init()
   }, [])
 
-  const loadTimesheets = async (employeeId: number, f: string, t: string) => {
+  const handleFilter = async (f: string, t: string) => {
+    setFrom(f)
+    setTo(t)
+
+    const user = appUserRef.current
+    if (!user?.employee_id) return
+
     const { data, error } = await supabase
       .from('timesheets')
       .select('*')
-      .eq('employee_id', Number(employeeId))
+      .eq('employee_id', Number(user.employee_id))
       .gte('date', f)
       .lte('date', t)
       .order('date', { ascending: false })
@@ -77,22 +85,10 @@ export default function DashboardPage() {
     if (!error) setTimesheets(data || [])
   }
 
- const handleFilter = async (f: string, t: string) => {
-  setFrom(f)
-  setTo(t)
-  if (appUser?.employee_id) {
-    const { data, error } = await supabase
-      .from('timesheets')
-      .select('*')
-      .eq('employee_id', Number(appUser.employee_id))
-      .gte('date', f)
-      .lte('date', t)
-      .order('date', { ascending: false })
-      .limit(1000)
-
-    if (!error) setTimesheets(data || [])
-  }
-}
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <p className="text-slate-400 text-sm">Se incarca...</p>
+    </div>
   )
 
   const totalHours = timesheets.reduce((s, r) => s + Number(r.hours_worked), 0)
