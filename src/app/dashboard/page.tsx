@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatHours, cn } from '@/lib/utils'
 import { Clock, Calendar, TrendingUp, Award, AlertTriangle } from 'lucide-react'
-import { format, startOfMonth, startOfWeek, subMonths, endOfMonth } from 'date-fns'
+import { format, startOfMonth, startOfWeek } from 'date-fns'
 import TimesheetTable from '@/components/TimesheetTable'
 import DateFilter from '@/components/DateFilter'
 import HoursChart from '@/components/charts/HoursChart'
@@ -19,8 +19,8 @@ export default function DashboardPage() {
   const [appUser, setAppUser] = useState<any>(null)
   const [timesheets, setTimesheets] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
- const [from, setFrom] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'))
-const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [from, setFrom] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'))
+  const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'))
 
   useEffect(() => {
     const init = async () => {
@@ -34,17 +34,16 @@ const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'))
         .single()
 
       if (!u || error) { router.push('/login'); return }
-
-      // Doar adminul fara employee_id e redirectat
-      if (u.role === 'admin' && !u.employee_id) {
-        router.push('/admin/upload')
-        return
-      }
+      if (u.role === 'admin' && !u.employee_id) { router.push('/admin/upload'); return }
 
       setAppUser(u)
 
       if (u.employee_id) {
-        await loadTimesheets(u.employee_id, from, to)
+        const currentFrom = format(startOfMonth(new Date()), 'yyyy-MM-dd')
+        const currentTo = format(new Date(), 'yyyy-MM-dd')
+        setFrom(currentFrom)
+        setTo(currentTo)
+        await loadTimesheets(u.employee_id, currentFrom, currentTo)
       }
 
       setLoading(false)
