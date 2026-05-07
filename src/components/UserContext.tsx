@@ -10,6 +10,7 @@ interface UserInfo {
   employee_id: number | null
   terms_accepted: boolean
   terms_accepted_at: string | null
+  norma_ore: number
 }
 
 const UserContext = createContext<UserInfo | null>(null)
@@ -52,7 +53,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           role: data.role || '',
           employee_id: data.employee_id || null,
           terms_accepted: data.terms_accepted || false,
-          terms_accepted_at: data.terms_accepted_at || null
+          terms_accepted_at: data.terms_accepted_at || null,
+          norma_ore: data.norma_ore ?? 8.25
         }
         setUser(info)
         sessionStorage.setItem('pontaj_user', JSON.stringify(info))
@@ -72,15 +74,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
     return () => subscription.unsubscribe()
   }, [])
-
-  const updateUser = (updates: Partial<UserInfo>) => {
-    setUser(prev => {
-      if (!prev) return prev
-      const updated = { ...prev, ...updates }
-      sessionStorage.setItem('pontaj_user', JSON.stringify(updated))
-      return updated
-    })
-  }
 
   return (
     <UserContext.Provider value={user}>
