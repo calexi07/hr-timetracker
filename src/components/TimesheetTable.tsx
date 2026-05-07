@@ -54,6 +54,11 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
 
   const empId = employeeId || user?.employee_id
 
+  // Actualizeaza rows cand se schimba timesheets din exterior
+  useEffect(() => {
+    setRows(timesheets)
+  }, [timesheets])
+
   useEffect(() => {
     if (!empId || !from || !to) return
     const load = async () => {
