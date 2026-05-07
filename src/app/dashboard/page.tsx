@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatHours, cn } from '@/lib/utils'
 import { Clock, Calendar, TrendingUp, Award, AlertTriangle } from 'lucide-react'
-import { format, startOfWeek, subDays } from 'date-fns'
+import { format, startOfWeek, endOfWeek } from 'date-fns'
 import TimesheetTable from '@/components/TimesheetTable'
 import DateFilter from '@/components/DateFilter'
 import HoursChart from '@/components/charts/HoursChart'
@@ -13,14 +13,17 @@ import LastUpdated from '@/components/LastUpdated'
 
 const NORMA_ZI = 8.25
 
+const getWeekStart = () => format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
+const getWeekEnd = () => format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
+
 export default function DashboardPage() {
   const router = useRouter()
   const supabase = createClient()
   const [appUser, setAppUser] = useState<any>(null)
   const [timesheets, setTimesheets] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [from, setFrom] = useState(format(subDays(new Date(), 29), 'yyyy-MM-dd'))
-  const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [from, setFrom] = useState(getWeekStart())
+  const [to, setTo] = useState(getWeekEnd())
 
   useEffect(() => {
     const init = async () => {
@@ -39,8 +42,8 @@ export default function DashboardPage() {
       setAppUser(u)
 
       if (u.employee_id) {
-        const currentFrom = format(subDays(new Date(), 29), 'yyyy-MM-dd')
-        const currentTo = format(new Date(), 'yyyy-MM-dd')
+        const currentFrom = getWeekStart()
+        const currentTo = getWeekEnd()
         setFrom(currentFrom)
         setTo(currentTo)
 
