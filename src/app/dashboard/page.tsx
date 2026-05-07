@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatHours, cn } from '@/lib/utils'
@@ -20,7 +20,7 @@ export default function DashboardPage() {
   const router = useRouter()
   const supabase = createClient()
   const [appUser, setAppUser] = useState<any>(null)
-  const appUserRef = useRef<any>(null)
+  const [employeeId, setEmployeeId] = useState<number | null>(null)
   const [timesheets, setTimesheets] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [from, setFrom] = useState(getWeekStart())
@@ -41,7 +41,7 @@ export default function DashboardPage() {
       if (u.role === 'admin' && !u.employee_id) { router.push('/admin/upload'); return }
 
       setAppUser(u)
-      appUserRef.current = u
+      setEmployeeId(Number(u.employee_id))
 
       if (u.employee_id) {
         const currentFrom = getWeekStart()
@@ -49,7 +49,7 @@ export default function DashboardPage() {
         setFrom(currentFrom)
         setTo(currentTo)
 
-        const { data, error: tsError } = await supabase
+        const { data } = await supabase
           .from('timesheets')
           .select('*')
           .eq('employee_id', Number(u.employee_id))
@@ -58,7 +58,7 @@ export default function DashboardPage() {
           .order('date', { ascending: false })
           .limit(1000)
 
-        if (!tsError) setTimesheets(data || [])
+        setTimesheets(data || [])
       }
 
       setLoading(false)
@@ -70,18 +70,29 @@ export default function DashboardPage() {
     setFrom(f)
     setTo(t)
 
-    const user = appUserRef.current
-    if (!user?.employee_id) return
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { data: u } = await supabase
+      .from('app_users')
+      .select('employee_id')
+      .eq('id', user.id)
+      .single()
+
+    if (!u?.employee_id) return
+
+    console.log('Fetching timesheets for employee:', u.employee_id, f, t)
 
     const { data, error } = await supabase
       .from('timesheets')
       .select('*')
-      .eq('employee_id', Number(user.employee_id))
+      .eq('employee_id', Number(u.employee_id))
       .gte('date', f)
       .lte('date', t)
       .order('date', { ascending: false })
       .limit(1000)
 
+    console.log('Result:', data?.length, error)
     if (!error) setTimesheets(data || [])
   }
 
