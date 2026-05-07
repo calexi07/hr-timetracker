@@ -43,7 +43,20 @@ export default function DashboardPage() {
         const currentTo = format(new Date(), 'yyyy-MM-dd')
         setFrom(currentFrom)
         setTo(currentTo)
-        await loadTimesheets(u.employee_id, currentFrom, currentTo)
+
+        console.log('Loading timesheets for:', u.employee_id, currentFrom, currentTo)
+
+        const { data, error: tsError } = await supabase
+          .from('timesheets')
+          .select('*')
+          .eq('employee_id', Number(u.employee_id))
+          .gte('date', currentFrom)
+          .lte('date', currentTo)
+          .order('date', { ascending: false })
+          .limit(1000)
+
+        console.log('Timesheets loaded:', data?.length, tsError)
+        setTimesheets(data || [])
       }
 
       setLoading(false)
@@ -52,6 +65,7 @@ export default function DashboardPage() {
   }, [])
 
   const loadTimesheets = async (employeeId: number, f: string, t: string) => {
+    console.log('Filter loading timesheets for:', employeeId, f, t)
     const { data, error } = await supabase
       .from('timesheets')
       .select('*')
@@ -59,7 +73,9 @@ export default function DashboardPage() {
       .gte('date', f)
       .lte('date', t)
       .order('date', { ascending: false })
+      .limit(1000)
 
+    console.log('Filter timesheets loaded:', data?.length, error)
     if (error) {
       console.error('Timesheet error:', error)
       return
