@@ -11,8 +11,6 @@ import HoursChart from '@/components/charts/HoursChart'
 import Sidebar from '@/components/Sidebar'
 import LastUpdated from '@/components/LastUpdated'
 
-const NORMA_ZI = 8.25
-
 const getWeekStart = () => format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
 const getWeekEnd = () => format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
 
@@ -20,7 +18,6 @@ export default function DashboardPage() {
   const router = useRouter()
   const supabase = createClient()
   const [appUser, setAppUser] = useState<any>(null)
-  const [employeeId, setEmployeeId] = useState<number | null>(null)
   const [timesheets, setTimesheets] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [from, setFrom] = useState(getWeekStart())
@@ -41,7 +38,6 @@ export default function DashboardPage() {
       if (u.role === 'admin' && !u.employee_id) { router.push('/admin/upload'); return }
 
       setAppUser(u)
-      setEmployeeId(Number(u.employee_id))
 
       if (u.employee_id) {
         const currentFrom = getWeekStart()
@@ -81,8 +77,6 @@ export default function DashboardPage() {
 
     if (!u?.employee_id) return
 
-    console.log('Fetching timesheets for employee:', u.employee_id, f, t)
-
     const { data, error } = await supabase
       .from('timesheets')
       .select('*')
@@ -92,7 +86,6 @@ export default function DashboardPage() {
       .order('date', { ascending: false })
       .limit(1000)
 
-    console.log('Result:', data?.length, error)
     if (!error) setTimesheets(data || [])
   }
 
@@ -102,14 +95,22 @@ export default function DashboardPage() {
     </div>
   )
 
+  const normaZi = appUser?.norma_ore ?? 8.25
   const totalHours = timesheets.reduce((s, r) => s + Number(r.hours_worked), 0)
   const daysWorked = timesheets.length
   const maxDay = timesheets.reduce((best, r) => Number(r.hours_worked) > best ? Number(r.hours_worked) : best, 0)
   const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
   const weekHours = timesheets.filter(r => r.date >= weekStart).reduce((s, r) => s + Number(r.hours_worked), 0)
-  const totalNorma = daysWorked * NORMA_ZI
+  const totalNorma = daysWorked * normaZi
   const totalDiff = totalHours - totalNorma
   const totalDiffMin = Math.round(totalDiff * 60)
+
+  const formatNormaLabel = () => {
+    const h = Math.floor(normaZi)
+    const m = Math.round((normaZi - h) * 60)
+    if (m === 0) return `${h}h`
+    return `${h}h ${m}m`
+  }
 
   const formatBilant = () => {
     const abs = Math.abs(totalDiffMin)
@@ -130,7 +131,12 @@ export default function DashboardPage() {
             <h1 className="text-2xl font-bold text-slate-900">
               Bun venit, {appUser?.name?.split(' ')[0] || appUser?.email} 👋
             </h1>
-            <p className="text-slate-500 mt-1">Iata rezumatul prezentei tale</p>
+            <p className="text-slate-500 mt-1">
+              Iata rezumatul prezentei tale
+              <span className="ml-2 text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
+                Norma: {formatNormaLabel()}/zi
+              </span>
+            </p>
           </div>
           <LastUpdated />
         </div>
@@ -235,7 +241,7 @@ export default function DashboardPage() {
 
             <div className="card p-6 mb-8">
               <h2 className="text-base font-semibold text-slate-900 mb-4">Ore zilnice</h2>
-              <HoursChart timesheets={timesheets} />
+              <HoursChart timesheets={timesheets} normaZi={normaZi} />
             </div>
 
             <div className="card p-6">
@@ -248,6 +254,7 @@ export default function DashboardPage() {
                 from={from}
                 to={to}
                 employeeId={Number(appUser.employee_id)}
+                normaZi={normaZi}
               />
             </div>
           </>
