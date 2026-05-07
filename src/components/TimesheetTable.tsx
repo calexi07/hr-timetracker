@@ -8,20 +8,18 @@ import { eachDayOfInterval, parseISO, format, isWeekend } from 'date-fns'
 import { ro } from 'date-fns/locale'
 import { useUser } from '@/components/UserContext'
 
-const NORMA_ZI = 8.25
-
-function getStatus(hours: number): { label: string; color: string } {
+function getStatus(hours: number, norma: number): { label: string; color: string } {
   if (hours === 0) return { label: 'Fara date', color: 'bg-slate-100 text-slate-500' }
-  const diff = hours - NORMA_ZI
+  const diff = hours - norma
   const minute = Math.round(diff * 60)
   if (minute === 0) return { label: 'Normal', color: 'bg-green-100 text-green-700' }
   if (minute > 0) return { label: 'Timp in plus', color: 'bg-blue-100 text-blue-700' }
   return { label: 'Timp de recuperat', color: 'bg-amber-100 text-amber-700' }
 }
 
-function formatDiff(hours: number): { text: string; color: string } {
+function formatDiff(hours: number, norma: number): { text: string; color: string } {
   if (hours === 0) return { text: '—', color: 'text-slate-400' }
-  const diff = hours - NORMA_ZI
+  const diff = hours - norma
   const totalMinute = Math.round(diff * 60)
   if (totalMinute === 0) return { text: '±0m', color: 'text-green-600' }
   const semn = totalMinute > 0 ? '+' : '-'
@@ -40,9 +38,10 @@ interface Props {
   from?: string
   to?: string
   employeeId?: number
+  normaZi?: number
 }
 
-export default function TimesheetTable({ timesheets, readonly = false, from, to, employeeId }: Props) {
+export default function TimesheetTable({ timesheets, readonly = false, from, to, employeeId, normaZi }: Props) {
   const supabase = createClient()
   const user = useUser()
   const [rows, setRows] = useState(timesheets)
@@ -53,8 +52,8 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
   const [saving, setSaving] = useState(false)
 
   const empId = employeeId || user?.employee_id
+  const NORMA = normaZi ?? user?.norma_ore ?? 8.25
 
-  // Actualizeaza rows cand se schimba timesheets din exterior
   useEffect(() => {
     setRows(timesheets)
   }, [timesheets])
@@ -172,7 +171,7 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
   }
 
   const totalOre = rows.reduce((s, r) => s + Number(r.hours_worked), 0)
-  const totalNorma = rows.length * NORMA_ZI
+  const totalNorma = rows.length * NORMA
   const totalDiffMinute = Math.round((totalOre - totalNorma) * 60)
 
   const formatTotalDiff = (minute: number) => {
@@ -190,7 +189,7 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
         .filter(r => !r.weekend)
         .map(({ date, pontaj, ziSaptamana }) => {
           const obs = pontaj?.observatii || observatiiZile[date] || ''
-          const diff = pontaj ? Math.round((Number(pontaj.hours_worked) - NORMA_ZI) * 60) : 0
+          const diff = pontaj ? Math.round((Number(pontaj.hours_worked) - NORMA) * 60) : 0
           return {
             'Data': date,
             'Zi': ziSaptamana,
@@ -198,7 +197,7 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
             'Iesire': pontaj?.check_out || '—',
             'Ore lucrate': pontaj?.hours_worked || 0,
             'Diferenta': pontaj ? (diff >= 0 ? `+${diff}m` : `${diff}m`) : '—',
-            'Status': pontaj ? getStatus(Number(pontaj.hours_worked)).label : 'Fara date',
+            'Status': pontaj ? getStatus(Number(pontaj.hours_worked), NORMA).label : 'Fara date',
             'Observatii': obs,
           }
         }),
@@ -337,8 +336,8 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                 )
               }
 
-              const { label, color } = getStatus(Number(pontaj.hours_worked))
-              const { text: diffText, color: diffColor } = formatDiff(Number(pontaj.hours_worked))
+              const { label, color } = getStatus(Number(pontaj.hours_worked), NORMA)
+              const { text: diffText, color: diffColor } = formatDiff(Number(pontaj.hours_worked), NORMA)
 
               return (
                 <tr key={date} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
