@@ -77,18 +77,22 @@ export default function DashboardPage() {
     if (!error) setTimesheets(data || [])
   }
 
-  const handleFilter = async (f: string, t: string) => {
-    setFrom(f)
-    setTo(t)
-    if (appUser?.employee_id) {
-      await loadTimesheets(appUser.employee_id, f, t)
-    }
-  }
+ const handleFilter = async (f: string, t: string) => {
+  setFrom(f)
+  setTo(t)
+  if (appUser?.employee_id) {
+    const { data, error } = await supabase
+      .from('timesheets')
+      .select('*')
+      .eq('employee_id', Number(appUser.employee_id))
+      .gte('date', f)
+      .lte('date', t)
+      .order('date', { ascending: false })
+      .limit(1000)
 
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <p className="text-slate-400 text-sm">Se incarca...</p>
-    </div>
+    if (!error) setTimesheets(data || [])
+  }
+}
   )
 
   const totalHours = timesheets.reduce((s, r) => s + Number(r.hours_worked), 0)
