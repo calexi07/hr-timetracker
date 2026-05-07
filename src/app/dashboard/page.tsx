@@ -19,8 +19,8 @@ export default function DashboardPage() {
   const [appUser, setAppUser] = useState<any>(null)
   const [timesheets, setTimesheets] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [from, setFrom] = useState(format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd'))
-  const [to, setTo] = useState(format(endOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd'))
+ const [from, setFrom] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'))
+const [to, setTo] = useState(format(new Date(), 'yyyy-MM-dd'))
 
   useEffect(() => {
     const init = async () => {
