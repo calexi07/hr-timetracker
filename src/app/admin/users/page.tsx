@@ -20,10 +20,10 @@ export default function UsersPage() {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [resettingConsent, setResettingConsent] = useState<string | null>(null)
   const [resettingAll, setResettingAll] = useState(false)
-  const [edits, setEdits] = useState<Record<string, { role: string; employee_id: string; name: string; manager_id: string }>>({})
+  const [edits, setEdits] = useState<Record<string, { role: string; employee_id: string; name: string; manager_id: string; norma_ore: string }>>({})
   const [showForm, setShowForm] = useState(false)
   const [showPass, setShowPass] = useState(false)
-  const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'employee', employee_id: '', manager_id: '' })
+  const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'employee', employee_id: '', manager_id: '', norma_ore: '8.25' })
   const [creating, setCreating] = useState(false)
   const [credModal, setCredModal] = useState<{ open: boolean; user: any | null }>({ open: false, user: null })
   const [newPassword, setNewPassword] = useState('')
@@ -54,13 +54,21 @@ export default function UsersPage() {
     if (!edit) return
     setSaving(user.id)
 
+    const normaOre = parseFloat(edit.norma_ore)
+    if (isNaN(normaOre) || normaOre <= 0 || normaOre > 24) {
+      toast.error('Norma de ore trebuie sa fie intre 0 si 24')
+      setSaving(null)
+      return
+    }
+
     const { error } = await supabase
       .from('app_users')
       .update({
         name: edit.name,
         role: edit.role,
         employee_id: edit.employee_id ? parseInt(edit.employee_id) : null,
-        manager_id: edit.manager_id || null
+        manager_id: edit.manager_id || null,
+        norma_ore: normaOre
       })
       .eq('id', user.id)
 
@@ -70,7 +78,7 @@ export default function UsersPage() {
       toast.success('Utilizator actualizat')
       setUsers(prev => prev.map(u =>
         u.id === user.id
-          ? { ...u, name: edit.name, role: edit.role, employee_id: edit.employee_id ? parseInt(edit.employee_id) : null, manager_id: edit.manager_id || null }
+          ? { ...u, name: edit.name, role: edit.role, employee_id: edit.employee_id ? parseInt(edit.employee_id) : null, manager_id: edit.manager_id || null, norma_ore: normaOre }
           : u
       ))
       const next = { ...edits }
@@ -119,7 +127,7 @@ export default function UsersPage() {
     } else {
       toast.success('Utilizator creat')
       setShowForm(false)
-      setNewUser({ name: '', email: '', password: '', role: 'employee', employee_id: '', manager_id: '' })
+      setNewUser({ name: '', email: '', password: '', role: 'employee', employee_id: '', manager_id: '', norma_ore: '8.25' })
       await load()
     }
     setCreating(false)
@@ -182,7 +190,7 @@ export default function UsersPage() {
   }
 
   const handleResetConsent = async (user: any) => {
-    if (!confirm(`Resetezi acceptul termenilor pentru ${user.name}? La urmatoarea conectare va trebui sa accepte din nou.`)) return
+    if (!confirm(`Resetezi acceptul termenilor pentru ${user.name}?`)) return
     setResettingConsent(user.id)
 
     const res = await fetch('/api/users/reset-consent', {
@@ -203,7 +211,7 @@ export default function UsersPage() {
   }
 
   const handleResetAllConsent = async () => {
-    if (!confirm('Resetezi acceptul termenilor pentru TOTI utilizatorii? La urmatoarea conectare vor trebui sa accepte din nou.')) return
+    if (!confirm('Resetezi acceptul termenilor pentru TOTI utilizatorii?')) return
     setResettingAll(true)
 
     const res = await fetch('/api/users/reset-consent', {
@@ -229,9 +237,18 @@ export default function UsersPage() {
         role: prev[userId]?.role ?? user.role,
         employee_id: prev[userId]?.employee_id ?? String(user.employee_id || ''),
         manager_id: prev[userId]?.manager_id ?? String(user.manager_id || ''),
+        norma_ore: prev[userId]?.norma_ore ?? String(user.norma_ore ?? '8.25'),
         [field]: value
       }
     }))
+  }
+
+  // Formateaza norma pentru afisare
+  const formatNorma = (ore: number) => {
+    const h = Math.floor(ore)
+    const m = Math.round((ore - h) * 60)
+    if (m === 0) return `${h}h`
+    return `${h}h ${m}m`
   }
 
   if (loading) return <div className="p-8 text-slate-400">Se incarca...</div>
@@ -297,7 +314,7 @@ export default function UsersPage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Gestionare angajati</h1>
-          <p className="text-slate-500 mt-1">Adauga, editeaza sau sterge conturi. Asigneaza manageri si roluri.</p>
+          <p className="text-slate-500 mt-1">Adauga, editeaza sau sterge conturi. Asigneaza manageri, roluri si norma de ore.</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -316,9 +333,8 @@ export default function UsersPage() {
       </div>
 
       <div className="card p-4 mb-6 bg-blue-50 border-blue-100 text-sm text-blue-800">
-        <strong>Ierarhie:</strong> Un manager poate fi subordonat altui manager sau director.
-        Managerul de nivel superior vede automat intreaga echipa recursiv.
-        Directorul vede pe toata lumea.
+        <strong>Norma de ore</strong> — implicit 8h 15m (8.25). Modifica pentru angajatii cu program diferit (ex: part-time, ture).
+        Dashboardul fiecarui angajat va folosi automat norma setata.
       </div>
 
       {showForm && (
@@ -364,6 +380,13 @@ export default function UsersPage() {
               <input type="number" placeholder="ex: 21" value={newUser.employee_id}
                 onChange={e => setNewUser({ ...newUser, employee_id: e.target.value })} className="input" />
             </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Norma ore/zi</label>
+              <input type="number" step="0.25" min="0.25" max="24" placeholder="8.25"
+                value={newUser.norma_ore}
+                onChange={e => setNewUser({ ...newUser, norma_ore: e.target.value })} className="input" />
+              <p className="text-xs text-slate-400 mt-1">Ex: 8.25 = 8h 15m, 4.0 = 4h, 6.5 = 6h 30m</p>
+            </div>
             {ROLURI_CU_MANAGER.includes(newUser.role) && (
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">Manager / Director direct</label>
@@ -395,7 +418,8 @@ export default function UsersPage() {
               <th className="text-left px-4 py-3 font-medium text-slate-500">Email</th>
               <th className="text-left px-4 py-3 font-medium text-slate-500">Nume</th>
               <th className="text-left px-4 py-3 font-medium text-slate-500">Rol</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-500">ID Angajat</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-500">ID</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-500">Norma/zi</th>
               <th className="text-left px-4 py-3 font-medium text-slate-500">Superior</th>
               <th className="text-left px-4 py-3 font-medium text-slate-500">Termeni</th>
               <th className="text-left px-4 py-3 font-medium text-slate-500">Credentiale</th>
@@ -408,6 +432,7 @@ export default function UsersPage() {
               const currentRole = edit?.role ?? user.role
               const showManagerField = ROLURI_CU_MANAGER.includes(currentRole)
               const currentManagerId = edit?.manager_id ?? String(user.manager_id || '')
+              const currentNorma = edit?.norma_ore ?? String(user.norma_ore ?? '8.25')
 
               return (
                 <tr key={user.id} className="border-b border-slate-50 hover:bg-slate-50">
@@ -422,12 +447,12 @@ export default function UsersPage() {
                   <td className="px-4 py-3">
                     <input type="text" value={edit?.name ?? user.name ?? ''}
                       onChange={e => setEdit(user.id, 'name', e.target.value, user)}
-                      className="input py-1.5 w-36" />
+                      className="input py-1.5 w-32" />
                   </td>
                   <td className="px-4 py-3">
                     <select value={currentRole}
                       onChange={e => setEdit(user.id, 'role', e.target.value, user)}
-                      className="input py-1.5 w-32">
+                      className="input py-1.5 w-28">
                       {ROLURI.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                     </select>
                   </td>
@@ -435,13 +460,29 @@ export default function UsersPage() {
                     <input type="number" placeholder="ex: 21"
                       value={edit?.employee_id ?? String(user.employee_id || '')}
                       onChange={e => setEdit(user.id, 'employee_id', e.target.value, user)}
-                      className="input py-1.5 w-20" />
+                      className="input py-1.5 w-16" />
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        step="0.25"
+                        min="0.25"
+                        max="24"
+                        value={currentNorma}
+                        onChange={e => setEdit(user.id, 'norma_ore', e.target.value, user)}
+                        className="input py-1.5 w-20"
+                      />
+                      <span className="text-xs text-slate-400 shrink-0">
+                        {formatNorma(parseFloat(currentNorma) || 8.25)}
+                      </span>
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     {showManagerField ? (
                       <select value={currentManagerId}
                         onChange={e => setEdit(user.id, 'manager_id', e.target.value, user)}
-                        className="input py-1.5 w-36">
+                        className="input py-1.5 w-32">
                         <option value="">— Fara —</option>
                         {getPosibiliManageri(user.id).map(m => (
                           <option key={m.id} value={m.id}>
@@ -463,13 +504,9 @@ export default function UsersPage() {
                       <button
                         onClick={() => handleResetConsent(user)}
                         disabled={resettingConsent === user.id || !user.terms_accepted}
-                        title="Reseteaza consimtamant"
                         className="p-1 rounded-lg text-slate-300 hover:text-amber-600 hover:bg-amber-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                       >
-                        {resettingConsent === user.id
-                          ? <span className="text-xs">...</span>
-                          : <RotateCcw size={13} />
-                        }
+                        {resettingConsent === user.id ? <span className="text-xs">...</span> : <RotateCcw size={13} />}
                       </button>
                     </div>
                   </td>
