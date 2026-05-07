@@ -96,6 +96,7 @@ export default function DashboardPage() {
   )
 
   const normaZi = appUser?.norma_ore ?? 8.25
+
   const totalHours = timesheets.reduce((s, r) => s + Number(r.hours_worked), 0)
   const daysWorked = timesheets.length
   const maxDay = timesheets.reduce((best, r) => Number(r.hours_worked) > best ? Number(r.hours_worked) : best, 0)
@@ -104,13 +105,6 @@ export default function DashboardPage() {
   const totalNorma = daysWorked * normaZi
   const totalDiff = totalHours - totalNorma
   const totalDiffMin = Math.round(totalDiff * 60)
-
-  const formatNormaLabel = () => {
-    const h = Math.floor(normaZi)
-    const m = Math.round((normaZi - h) * 60)
-    if (m === 0) return `${h}h`
-    return `${h}h ${m}m`
-  }
 
   const formatBilant = () => {
     const abs = Math.abs(totalDiffMin)
@@ -131,12 +125,7 @@ export default function DashboardPage() {
             <h1 className="text-2xl font-bold text-slate-900">
               Bun venit, {appUser?.name?.split(' ')[0] || appUser?.email} 👋
             </h1>
-            <p className="text-slate-500 mt-1">
-              Iata rezumatul prezentei tale
-              <span className="ml-2 text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
-                Norma: {formatNormaLabel()}/zi
-              </span>
-            </p>
+            <p className="text-slate-500 mt-1">Iata rezumatul prezentei tale</p>
           </div>
           <LastUpdated />
         </div>
@@ -241,13 +230,18 @@ export default function DashboardPage() {
 
             <div className="card p-6 mb-8">
               <h2 className="text-base font-semibold text-slate-900 mb-4">Ore zilnice</h2>
-              <HoursChart timesheets={timesheets} normaZi={normaZi} />
+              <HoursChart timesheets={timesheets} />
             </div>
 
             <div className="card p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-base font-semibold text-slate-900">Detalii pontaj</h2>
-                <span className="text-xs text-slate-400">{timesheets.length} inregistrari</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-slate-400">
+                    Norma: {formatHours(normaZi)}/zi
+                  </span>
+                  <span className="text-xs text-slate-400">{timesheets.length} inregistrari</span>
+                </div>
               </div>
               <TimesheetTable
                 timesheets={timesheets}
