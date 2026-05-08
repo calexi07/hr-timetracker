@@ -89,6 +89,22 @@ export default function DashboardPage() {
     if (!error) setTimesheets(data || [])
   }
 
+  const handleMotivatieUpdate = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user || !appUser?.employee_id) return
+
+    const { data } = await supabase
+      .from('timesheets')
+      .select('*')
+      .eq('employee_id', Number(appUser.employee_id))
+      .gte('date', from)
+      .lte('date', to)
+      .order('date', { ascending: false })
+      .limit(1000)
+
+    setTimesheets(data || [])
+  }
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <p className="text-slate-400 text-sm">Se incarca...</p>
@@ -97,11 +113,21 @@ export default function DashboardPage() {
 
   const normaZi = appUser?.norma_ore ?? 8.25
 
-  const totalHours = timesheets.reduce((s, r) => s + Number(r.hours_worked), 0)
+  // Calculeaza ore tinand cont de motivatii aprobate
+  const totalHours = timesheets.reduce((s, r) => {
+    if (r.motivatie_status === 'aprobat') return s + normaZi
+    return s + Number(r.hours_worked)
+  }, 0)
+
   const daysWorked = timesheets.length
   const maxDay = timesheets.reduce((best, r) => Number(r.hours_worked) > best ? Number(r.hours_worked) : best, 0)
   const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
-  const weekHours = timesheets.filter(r => r.date >= weekStart).reduce((s, r) => s + Number(r.hours_worked), 0)
+  const weekHours = timesheets
+    .filter(r => r.date >= weekStart)
+    .reduce((s, r) => {
+      if (r.motivatie_status === 'aprobat') return s + normaZi
+      return s + Number(r.hours_worked)
+    }, 0)
   const totalNorma = daysWorked * normaZi
   const totalDiff = totalHours - totalNorma
   const totalDiffMin = Math.round(totalDiff * 60)
@@ -249,6 +275,7 @@ export default function DashboardPage() {
                 to={to}
                 employeeId={Number(appUser.employee_id)}
                 normaZi={normaZi}
+                onMotivatieUpdate={handleMotivatieUpdate}
               />
             </div>
           </>
