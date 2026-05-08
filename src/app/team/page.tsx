@@ -118,15 +118,18 @@ export default function TeamPage() {
       }
       const { data } = await supabase
         .from('timesheets')
-        .select('hours_worked')
+        .select('hours_worked, motivatie_status')
         .eq('employee_id', Number(member.employee_id))
         .gte('date', f)
         .lte('date', t)
 
       const rows = data || []
-      const totalOre = rows.reduce((s: number, r: any) => s + Number(r.hours_worked), 0)
-      const zile = rows.length
       const normaZi = member.norma_ore ?? DEFAULT_NORMA
+      const totalOre = rows.reduce((s: number, r: any) => {
+        if (r.motivatie_status === 'aprobat') return s + normaZi
+        return s + Number(r.hours_worked)
+      }, 0)
+      const zile = rows.length
       const norma = zile * normaZi
       const diffMin = Math.round((totalOre - norma) * 60)
       results.push({ member, totalOre, zile, norma, diffMin })
@@ -175,6 +178,18 @@ export default function TeamPage() {
     }
   }
 
+  const handleMotivatieUpdate = async () => {
+    if (selected?.employee_id) {
+      await loadTimesheets(Number(selected.employee_id), from, to)
+    }
+    const allM = currentUser?.role === 'director'
+      ? allMembers
+      : [...directTeam, ...Object.values(subManagerTeams).flat()].filter(
+          (m, i, arr) => arr.findIndex(x => x.id === m.id) === i
+        )
+    await loadSummaries(allM, from, to)
+  }
+
   const toggleManager = (managerId: string) => {
     setExpandedManagers(prev => {
       const next = new Set(prev)
@@ -201,7 +216,10 @@ export default function TeamPage() {
   }
 
   const selectedNorma = selected?.norma_ore ?? DEFAULT_NORMA
-  const totalHours = timesheets.reduce((s, r) => s + Number(r.hours_worked), 0)
+  const totalHours = timesheets.reduce((s, r) => {
+    if (r.motivatie_status === 'aprobat') return s + selectedNorma
+    return s + Number(r.hours_worked)
+  }, 0)
   const totalNorma = timesheets.length * selectedNorma
   const totalDiffMin = Math.round((totalHours - totalNorma) * 60)
 
@@ -350,7 +368,9 @@ export default function TeamPage() {
                         </div>
                         <div>
                           <p className="font-medium text-slate-900 text-sm">{s.member.name}</p>
-                          <p className="text-xs text-slate-400">{getRolLabel(s.member.role)} · {s.zile} zile · norma {formatHours(s.member.norma_ore ?? DEFAULT_NORMA)}/zi</p>
+                          <p className="text-xs text-slate-400">
+                            {getRolLabel(s.member.role)} · {s.zile} zile · norma {formatHours(s.member.norma_ore ?? DEFAULT_NORMA)}/zi
+                          </p>
                         </div>
                       </div>
                       <div className="text-right">
@@ -436,11 +456,8 @@ export default function TeamPage() {
                                 <p className="text-xs text-slate-400 mt-0.5">
                                   {mgrTeam.length} {mgrTeam.length === 1 ? 'persoana' : 'persoane'} in echipa
                                   {mgrSummary && (
-                                    <span className={cn(
-                                      'ml-2 font-medium',
-                                      areProbleme ? 'text-red-500'
-                                        : esteAvans ? 'text-blue-500'
-                                        : 'text-green-500'
+                                    <span className={cn('ml-2 font-medium',
+                                      areProbleme ? 'text-red-500' : esteAvans ? 'text-blue-500' : 'text-green-500'
                                     )}>
                                       · bilant propriu: {formatBilant(mgrSummary.diffMin)}
                                     </span>
@@ -448,17 +465,12 @@ export default function TeamPage() {
                                 </p>
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
-                                <button
-                                  onClick={() => handleSelectMember(mgr)}
-                                  className="btn-secondary text-xs py-1.5"
-                                >
+                                <button onClick={() => handleSelectMember(mgr)} className="btn-secondary text-xs py-1.5">
                                   Pontaj
                                 </button>
                                 {mgrTeam.length > 0 && (
-                                  <button
-                                    onClick={() => toggleManager(mgr.id)}
-                                    className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800 font-medium px-2 py-1.5 rounded-lg hover:bg-purple-100 transition-all"
-                                  >
+                                  <button onClick={() => toggleManager(mgr.id)}
+                                    className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800 font-medium px-2 py-1.5 rounded-lg hover:bg-purple-100 transition-all">
                                     {isExpanded ? 'Ascunde' : 'Vezi echipa'}
                                     <ChevronRight size={14} className={cn('transition-transform', isExpanded && 'rotate-90')} />
                                   </button>
@@ -543,9 +555,7 @@ export default function TeamPage() {
               </div>
             ) : !selected.employee_id ? (
               <div className="card p-8 text-center max-w-lg mx-auto">
-                <p className="text-slate-500 text-sm">
-                  Acest utilizator nu are un ID de angajat asignat.
-                </p>
+                <p className="text-slate-500 text-sm">Acest utilizator nu are un ID de angajat asignat.</p>
               </div>
             ) : (
               <>
@@ -562,25 +572,21 @@ export default function TeamPage() {
                     <p className="text-slate-500 text-xs font-medium mb-1">Norma perioada</p>
                     <p className="text-2xl font-bold text-slate-700">{formatHours(totalNorma)}</p>
                   </div>
-                  <div className={cn(
-                    'card p-5 border',
+                  <div className={cn('card p-5 border',
                     totalDiffMin === 0 ? 'bg-green-50 border-green-100'
                       : totalDiffMin > 0 ? 'bg-blue-50 border-blue-100'
                       : 'bg-red-50 border-red-100'
                   )}>
                     <p className="text-slate-500 text-xs font-medium mb-1">Bilant</p>
-                    <p className={cn(
-                      'text-2xl font-bold',
+                    <p className={cn('text-2xl font-bold',
                       totalDiffMin === 0 ? 'text-green-700'
                         : totalDiffMin > 0 ? 'text-blue-700'
                         : 'text-red-700'
                     )}>
-                      {formatBilant(totalDiffMin)}
+                      {totalDiffMin === 0 ? '±0m' : `${totalDiffMin > 0 ? '+' : ''}${Math.floor(Math.abs(totalDiffMin) / 60)}h ${Math.abs(totalDiffMin) % 60}m`}
                     </p>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      {totalDiffMin === 0 ? 'Echilibrat'
-                        : totalDiffMin > 0 ? 'Timp in plus'
-                        : 'De recuperat'}
+                      {totalDiffMin === 0 ? 'Echilibrat' : totalDiffMin > 0 ? 'Timp in plus' : 'De recuperat'}
                     </p>
                   </div>
                 </div>
@@ -597,11 +603,13 @@ export default function TeamPage() {
                   </div>
                   <TimesheetTable
                     timesheets={timesheets}
-                    readonly={true}
+                    readonly={false}
                     from={from}
                     to={to}
                     employeeId={Number(selected.employee_id)}
                     normaZi={selectedNorma}
+                    isManager={true}
+                    onMotivatieUpdate={handleMotivatieUpdate}
                   />
                 </div>
               </>
