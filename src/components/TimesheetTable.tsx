@@ -19,7 +19,6 @@ function getStatus(hours: number, norma: number): { label: string; color: string
 
 function formatDiff(hours: number, norma: number, motivatieStatus?: string): { text: string; color: string } {
   if (hours === 0) return { text: '—', color: 'text-slate-400' }
-  // Daca motivatia e aprobata, diferenta e 0
   if (motivatieStatus === 'aprobat') return { text: '±0m', color: 'text-green-600' }
   const diff = hours - norma
   const totalMinute = Math.round(diff * 60)
@@ -69,14 +68,18 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
   const user = useUser()
   const [rows, setRows] = useState(timesheets)
   const [observatiiZile, setObservatiiZile] = useState<Record<string, any>>({})
-  const [modal, setModal] = useState<{ open: boolean; date: string; pontaj: any | null; motivatie: string; type: 'edit' | 'approve' }>({
-    open: false, date: '', pontaj: null, motivatie: '', type: 'edit'
-  })
+  const [modal, setModal] = useState<{
+    open: boolean
+    date: string
+    pontaj: any | null
+    motivatie: string
+    type: 'edit' | 'approve'
+    raspuns: string
+  }>({ open: false, date: '', pontaj: null, motivatie: '', type: 'edit', raspuns: '' })
   const [saving, setSaving] = useState(false)
 
   const empId = employeeId || user?.employee_id
   const NORMA = normaZi ?? user?.norma_ore ?? 8.25
-  const canApprove = isManager || user?.role === 'manager' || user?.role === 'director' || user?.role === 'admin'
 
   useEffect(() => { setRows(timesheets) }, [timesheets])
 
@@ -119,18 +122,25 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
     ziSaptamana: format(parseISO(r.date), 'EEEE', { locale: ro })
   }))
 
+  const getMotivatieForRow = (date: string, pontaj: any) => {
+    const text = pontaj?.motivatie || observatiiZile[date]?.observatie || null
+    const status = pontaj?.motivatie_status || observatiiZile[date]?.motivatie_status || null
+    const raspuns = pontaj?.motivatie_raspuns || observatiiZile[date]?.motivatie_raspuns || null
+    return { text, status, raspuns }
+  }
+
   const openEditModal = (date: string, pontaj: any | null) => {
-    const obsExistenta = pontaj?.motivatie || observatiiZile[date]?.observatie || ''
-    setModal({ open: true, date, pontaj, motivatie: obsExistenta, type: 'edit' })
+    const { text } = getMotivatieForRow(date, pontaj)
+    setModal({ open: true, date, pontaj, motivatie: text || '', type: 'edit', raspuns: '' })
   }
 
   const openApproveModal = (date: string, pontaj: any | null) => {
-    const motivatieText = pontaj?.motivatie || observatiiZile[date]?.observatie || ''
-    setModal({ open: true, date, pontaj, motivatie: motivatieText, type: 'approve' })
+    const { text, raspuns } = getMotivatieForRow(date, pontaj)
+    setModal({ open: true, date, pontaj, motivatie: text || '', type: 'approve', raspuns: raspuns || '' })
   }
 
   const closeModal = () => {
-    setModal({ open: false, date: '', pontaj: null, motivatie: '', type: 'edit' })
+    setModal({ open: false, date: '', pontaj: null, motivatie: '', type: 'edit', raspuns: '' })
   }
 
   const handleSaveMotivatie = async () => {
@@ -144,7 +154,8 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
           motivatie: modal.motivatie.trim() || null,
           motivatie_status: modal.motivatie.trim() ? 'in_asteptare' : null,
           motivatie_aprobata_de: null,
-          motivatie_aprobata_la: null
+          motivatie_aprobata_la: null,
+          motivatie_raspuns: null
         })
         .eq('id', modal.pontaj.id)
 
@@ -152,7 +163,7 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
 
       setRows(prev => prev.map(r =>
         r.id === modal.pontaj.id
-          ? { ...r, motivatie: modal.motivatie.trim() || null, motivatie_status: modal.motivatie.trim() ? 'in_asteptare' : null, motivatie_aprobata_de: null, motivatie_aprobata_la: null }
+          ? { ...r, motivatie: modal.motivatie.trim() || null, motivatie_status: modal.motivatie.trim() ? 'in_asteptare' : null, motivatie_aprobata_de: null, motivatie_aprobata_la: null, motivatie_raspuns: null }
           : r
       ))
     } else {
@@ -167,11 +178,15 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
             observatie: modal.motivatie.trim(),
             motivatie_status: 'in_asteptare',
             motivatie_aprobata_de: null,
-            motivatie_aprobata_la: null
+            motivatie_aprobata_la: null,
+            motivatie_raspuns: null
           }, { onConflict: 'employee_id,date' })
 
         if (error) { toast.error('Eroare: ' + error.message); setSaving(false); return }
-        setObservatiiZile(prev => ({ ...prev, [modal.date]: { ...prev[modal.date], observatie: modal.motivatie.trim(), motivatie_status: 'in_asteptare' } }))
+        setObservatiiZile(prev => ({
+          ...prev,
+          [modal.date]: { ...prev[modal.date], observatie: modal.motivatie.trim(), motivatie_status: 'in_asteptare', motivatie_raspuns: null }
+        }))
       } else {
         await supabase.from('observatii_zile').delete().eq('employee_id', empId).eq('date', modal.date)
         setObservatiiZile(prev => { const next = { ...prev }; delete next[modal.date]; return next })
@@ -184,90 +199,44 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
     onMotivatieUpdate?.()
   }
 
-  const handleApprove = async () => {
+  const handleDecizie = async (decizie: 'aprobat' | 'respins') => {
     if (!modal.date) return
     setSaving(true)
 
     const { data: { user: authUser } } = await supabase.auth.getUser()
+    const updateData = {
+      motivatie_status: decizie,
+      motivatie_aprobata_de: authUser?.id,
+      motivatie_aprobata_la: new Date().toISOString(),
+      motivatie_raspuns: modal.raspuns.trim() || null
+    }
 
     if (modal.pontaj) {
       const { error } = await supabase
         .from('timesheets')
-        .update({
-          motivatie_status: 'aprobat',
-          motivatie_aprobata_de: authUser?.id,
-          motivatie_aprobata_la: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', modal.pontaj.id)
 
       if (error) { toast.error('Eroare: ' + error.message); setSaving(false); return }
+
       setRows(prev => prev.map(r =>
-        r.id === modal.pontaj.id
-          ? { ...r, motivatie_status: 'aprobat', motivatie_aprobata_de: authUser?.id, motivatie_aprobata_la: new Date().toISOString() }
-          : r
+        r.id === modal.pontaj.id ? { ...r, ...updateData } : r
       ))
     } else {
       const obsZi = observatiiZile[modal.date]
       if (obsZi) {
-        await supabase.from('observatii_zile').update({
-          motivatie_status: 'aprobat',
-          motivatie_aprobata_de: authUser?.id,
-          motivatie_aprobata_la: new Date().toISOString()
-        }).eq('employee_id', empId).eq('date', modal.date)
-        setObservatiiZile(prev => ({ ...prev, [modal.date]: { ...prev[modal.date], motivatie_status: 'aprobat' } }))
+        await supabase.from('observatii_zile')
+          .update(updateData)
+          .eq('employee_id', empId)
+          .eq('date', modal.date)
+        setObservatiiZile(prev => ({ ...prev, [modal.date]: { ...prev[modal.date], ...updateData } }))
       }
     }
 
-    toast.success('Motivatie aprobata')
+    toast.success(decizie === 'aprobat' ? 'Motivatie aprobata' : 'Motivatie respinsa')
     closeModal()
     setSaving(false)
     onMotivatieUpdate?.()
-  }
-
-  const handleReject = async () => {
-    if (!modal.date) return
-    setSaving(true)
-
-    const { data: { user: authUser } } = await supabase.auth.getUser()
-
-    if (modal.pontaj) {
-      const { error } = await supabase
-        .from('timesheets')
-        .update({
-          motivatie_status: 'respins',
-          motivatie_aprobata_de: authUser?.id,
-          motivatie_aprobata_la: new Date().toISOString()
-        })
-        .eq('id', modal.pontaj.id)
-
-      if (error) { toast.error('Eroare: ' + error.message); setSaving(false); return }
-      setRows(prev => prev.map(r =>
-        r.id === modal.pontaj.id
-          ? { ...r, motivatie_status: 'respins', motivatie_aprobata_de: authUser?.id, motivatie_aprobata_la: new Date().toISOString() }
-          : r
-      ))
-    } else {
-      const obsZi = observatiiZile[modal.date]
-      if (obsZi) {
-        await supabase.from('observatii_zile').update({
-          motivatie_status: 'respins',
-          motivatie_aprobata_de: authUser?.id,
-          motivatie_aprobata_la: new Date().toISOString()
-        }).eq('employee_id', empId).eq('date', modal.date)
-        setObservatiiZile(prev => ({ ...prev, [modal.date]: { ...prev[modal.date], motivatie_status: 'respins' } }))
-      }
-    }
-
-    toast.success('Motivatie respinsa')
-    closeModal()
-    setSaving(false)
-    onMotivatieUpdate?.()
-  }
-
-  const getMotivatieForRow = (date: string, pontaj: any) => {
-    const text = pontaj?.motivatie || observatiiZile[date]?.observatie || null
-    const status = pontaj?.motivatie_status || observatiiZile[date]?.motivatie_status || null
-    return { text, status }
   }
 
   const totalOre = rows.reduce((s, r) => {
@@ -289,7 +258,7 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
   const handleExport = () => {
     downloadCSV(
       tableRows.filter(r => !r.weekend).map(({ date, pontaj, ziSaptamana }) => {
-        const { text: motivatieText, status: motivatieStatus } = getMotivatieForRow(date, pontaj)
+        const { text: motivatieText, status: motivatieStatus, raspuns } = getMotivatieForRow(date, pontaj)
         const effectiveHours = pontaj && motivatieStatus === 'aprobat' ? NORMA : Number(pontaj?.hours_worked || 0)
         const diff = pontaj ? Math.round((effectiveHours - NORMA) * 60) : 0
         return {
@@ -298,7 +267,9 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
           'Ore lucrate': pontaj?.hours_worked || 0,
           'Diferenta': pontaj ? (diff >= 0 ? `+${diff}m` : `${diff}m`) : '—',
           'Status': pontaj ? getStatus(Number(pontaj.hours_worked), NORMA).label : 'Fara date',
-          'Motivatie': motivatieText || '', 'Status motivatie': motivatieStatus || '',
+          'Motivatie': motivatieText || '',
+          'Status motivatie': motivatieStatus || '',
+          'Raspuns manager': raspuns || '',
         }
       }),
       `pontaj-${new Date().toISOString().split('T')[0]}.csv`
@@ -333,23 +304,54 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
 
             {modal.type === 'approve' ? (
               <>
-                <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-4">
-                  <p className="text-xs font-medium text-blue-800 mb-1">Motivatia angajatului:</p>
-                  <p className="text-sm text-blue-900">{modal.motivatie || '—'}</p>
+                {/* Motivatia angajatului - readonly */}
+                <div className="mb-4">
+                  <p className="text-xs font-medium text-slate-500 mb-1.5">Motivatia angajatului</p>
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                    <p className="text-sm text-slate-700">{modal.motivatie || '—'}</p>
+                  </div>
                 </div>
-                <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 mb-5 text-xs text-amber-700">
-                  Daca aprobi motivatia, diferenta din acea zi va fi considerata <strong>0</strong> (ziua va fi echilibrata).
+
+                <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 mb-4 text-xs text-amber-700">
+                  Daca aprobi motivatia, diferenta din acea zi va fi considerata <strong>0</strong>.
                 </div>
+
+                {/* Raspuns manager */}
+                <div className="mb-5">
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5">
+                    Raspunsul tau <span className="text-slate-400 font-normal">(optional)</span>
+                  </label>
+                  <textarea
+                    value={modal.raspuns}
+                    onChange={e => setModal(prev => ({ ...prev, raspuns: e.target.value }))}
+                    placeholder="Ex: Aprobat, conform politicii companiei. / Respins, necesita documentatie suplimentara."
+                    rows={3}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
+                  />
+                </div>
+
                 <div className="flex gap-3">
-                  <button onClick={handleReject} disabled={saving}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 font-medium text-sm transition-all">
-                    <XCircle size={16} />Respinge
+                  <button
+                    onClick={() => handleDecizie('respins')}
+                    disabled={saving}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 font-medium text-sm transition-all disabled:opacity-50"
+                  >
+                    <XCircle size={16} />
+                    {saving ? '...' : 'Respinge'}
                   </button>
-                  <button onClick={handleApprove} disabled={saving}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-medium text-sm transition-all">
-                    <CheckCircle size={16} />{saving ? 'Se salveaza...' : 'Aproba'}
+                  <button
+                    onClick={() => handleDecizie('aprobat')}
+                    disabled={saving}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-medium text-sm transition-all disabled:opacity-50"
+                  >
+                    <CheckCircle size={16} />
+                    {saving ? '...' : 'Aproba'}
                   </button>
                 </div>
+
+                <button onClick={closeModal} className="w-full mt-3 text-xs text-slate-400 hover:text-slate-600 py-1.5">
+                  Anuleaza
+                </button>
               </>
             ) : (
               <>
@@ -363,17 +365,17 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                   onChange={e => setModal(prev => ({ ...prev, motivatie: e.target.value }))}
                   placeholder="Ex: Lucrat de acasa (WFH), Concediu medical, Deplasare Cluj..."
                   rows={4}
-                  disabled={readonly}
+                  disabled={readonly || isManager}
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none disabled:bg-slate-50 disabled:text-slate-500"
                 />
                 <div className="flex gap-3 mt-4">
-                  {!readonly && (
+                  {!readonly && !isManager && (
                     <button onClick={handleSaveMotivatie} disabled={saving} className="btn-primary flex-1 justify-center">
                       {saving ? 'Se salveaza...' : <><Save size={15} />Salveaza</>}
                     </button>
                   )}
                   <button onClick={closeModal} className="btn-secondary flex-1 justify-center">
-                    {readonly ? 'Inchide' : 'Anuleaza'}
+                    Inchide
                   </button>
                 </div>
               </>
@@ -416,9 +418,10 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                 )
               }
 
-              const { text: motivatieText, status: motivatieStatus } = getMotivatieForRow(date, pontaj)
+              const { text: motivatieText, status: motivatieStatus, raspuns } = getMotivatieForRow(date, pontaj)
               const hasMot = !!motivatieText
-              const canApproveThis = canApprove && hasMot && motivatieStatus === 'in_asteptare'
+              const canApproveThis = isManager && hasMot && motivatieStatus === 'in_asteptare'
+              const canViewDecizie = hasMot && (motivatieStatus === 'aprobat' || motivatieStatus === 'respins')
 
               if (!pontaj) {
                 return (
@@ -433,31 +436,51 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                       <span className="badge bg-slate-100 text-slate-400">Fara date</span>
                     </td>
                     <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex flex-col gap-1">
                         {motivatieText && (
-                          <span className="text-xs text-slate-600 truncate max-w-[120px]" title={motivatieText}>
+                          <span className="text-xs text-slate-600 truncate max-w-[140px]" title={motivatieText}>
                             {motivatieText}
                           </span>
                         )}
-                        {getMotivatieStatusBadge(motivatieStatus)}
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {getMotivatieStatusBadge(motivatieStatus)}
+                          {raspuns && (
+                            <span className="text-xs text-slate-400 italic truncate max-w-[120px]" title={raspuns}>
+                              "{raspuns}"
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-1">
-                        {!readonly && (
-                          <button onClick={() => openEditModal(date, null)}
+                        {!isManager && !readonly && (
+                          <button
+                            onClick={() => openEditModal(date, null)}
                             className={cn('p-1.5 rounded-lg transition-all',
                               hasMot ? 'text-blue-500 hover:text-blue-700 hover:bg-blue-50'
                                 : 'text-slate-300 hover:text-slate-500 hover:bg-slate-100')}
-                            title="Adauga motivatie">
+                            title="Adauga motivatie"
+                          >
                             <MessageSquare size={15} />
                           </button>
                         )}
                         {canApproveThis && (
-                          <button onClick={() => openApproveModal(date, null)}
+                          <button
+                            onClick={() => openApproveModal(date, null)}
                             className="p-1.5 rounded-lg text-amber-500 hover:text-amber-700 hover:bg-amber-50 transition-all"
-                            title="Aproba / Respinge motivatia">
+                            title="Aproba / Respinge"
+                          >
                             <CheckCircle size={15} />
+                          </button>
+                        )}
+                        {isManager && canViewDecizie && (
+                          <button
+                            onClick={() => openApproveModal(date, null)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
+                            title="Vezi decizia"
+                          >
+                            <MessageSquare size={15} />
                           </button>
                         )}
                       </div>
@@ -486,29 +509,51 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex flex-col gap-1">
                       {motivatieText && (
-                        <span className="text-xs text-slate-600 truncate max-w-[120px]" title={motivatieText}>
+                        <span className="text-xs text-slate-600 truncate max-w-[140px]" title={motivatieText}>
                           {motivatieText}
                         </span>
                       )}
-                      {getMotivatieStatusBadge(motivatieStatus)}
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {getMotivatieStatusBadge(motivatieStatus)}
+                        {raspuns && (
+                          <span className="text-xs text-slate-400 italic truncate max-w-[120px]" title={raspuns}>
+                            "{raspuns}"
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
-                      <button onClick={() => openEditModal(date, pontaj)}
-                        className={cn('p-1.5 rounded-lg transition-all',
-                          hasMot ? 'text-blue-500 hover:text-blue-700 hover:bg-blue-50'
-                            : 'text-slate-300 hover:text-slate-500 hover:bg-slate-100')}
-                        title={readonly ? 'Vezi motivatie' : 'Adauga / editeaza motivatie'}>
-                        <MessageSquare size={15} />
-                      </button>
+                      {!isManager && (
+                        <button
+                          onClick={() => openEditModal(date, pontaj)}
+                          className={cn('p-1.5 rounded-lg transition-all',
+                            hasMot ? 'text-blue-500 hover:text-blue-700 hover:bg-blue-50'
+                              : 'text-slate-300 hover:text-slate-500 hover:bg-slate-100')}
+                          title={readonly ? 'Vezi motivatie' : 'Adauga / editeaza motivatie'}
+                        >
+                          <MessageSquare size={15} />
+                        </button>
+                      )}
                       {canApproveThis && (
-                        <button onClick={() => openApproveModal(date, pontaj)}
+                        <button
+                          onClick={() => openApproveModal(date, pontaj)}
                           className="p-1.5 rounded-lg text-amber-500 hover:text-amber-700 hover:bg-amber-50 transition-all"
-                          title="Aproba / Respinge motivatia">
+                          title="Aproba / Respinge"
+                        >
                           <CheckCircle size={15} />
+                        </button>
+                      )}
+                      {isManager && canViewDecizie && (
+                        <button
+                          onClick={() => openApproveModal(date, pontaj)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
+                          title="Vezi decizia"
+                        >
+                          <MessageSquare size={15} />
                         </button>
                       )}
                     </div>
