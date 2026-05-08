@@ -2,13 +2,15 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import TermsModal from '@/components/TermsModal'
+import NotificareMotivatie from '@/components/NotificareMotivatie'
 import { usePathname } from 'next/navigation'
 
 const PUBLIC_PATHS = ['/login', '/reset-password', '/update-password']
 
 export default function TermsGuard({ children }: { children: React.ReactNode }) {
   const [checking, setChecking] = useState(true)
-  const [showModal, setShowModal] = useState(false)
+  const [showTermsModal, setShowTermsModal] = useState(false)
+  const [showNotificare, setShowNotificare] = useState(false)
   const supabase = createClient()
   const pathname = usePathname()
 
@@ -25,6 +27,7 @@ export default function TermsGuard({ children }: { children: React.ReactNode }) 
         return
       }
 
+      // Sterge cache vechi fara terms_accepted
       const cached = sessionStorage.getItem('pontaj_user')
       if (cached) {
         try {
@@ -39,13 +42,16 @@ export default function TermsGuard({ children }: { children: React.ReactNode }) 
 
       const { data } = await supabase
         .from('app_users')
-        .select('terms_accepted')
+        .select('terms_accepted, notificare_motivatii_vazuta')
         .eq('id', user.id)
         .single()
 
-      // Nu arata modal pe pagina de termeni
       if (!data?.terms_accepted && !pathname.startsWith('/terms')) {
-        setShowModal(true)
+        // Termenii au prioritate
+        setShowTermsModal(true)
+      } else if (data?.terms_accepted && !data?.notificare_motivatii_vazuta) {
+        // Dupa termeni, arata notificarea
+        setShowNotificare(true)
       }
 
       setChecking(false)
@@ -53,8 +59,9 @@ export default function TermsGuard({ children }: { children: React.ReactNode }) 
     check()
   }, [pathname])
 
-  const handleAccept = () => {
-    setShowModal(false)
+  const handleAcceptTerms = () => {
+    setShowTermsModal(false)
+
     const cached = sessionStorage.getItem('pontaj_user')
     if (cached) {
       try {
@@ -64,6 +71,13 @@ export default function TermsGuard({ children }: { children: React.ReactNode }) 
         sessionStorage.setItem('pontaj_user', JSON.stringify(parsed))
       } catch {}
     }
+
+    // Dupa acceptarea termenilor, arata notificarea
+    setShowNotificare(true)
+  }
+
+  const handleCloseNotificare = () => {
+    setShowNotificare(false)
   }
 
   if (checking && !PUBLIC_PATHS.some(p => pathname.startsWith(p))) return (
@@ -74,7 +88,8 @@ export default function TermsGuard({ children }: { children: React.ReactNode }) 
 
   return (
     <>
-      {showModal && <TermsModal onAccept={handleAccept} />}
+      {showTermsModal && <TermsModal onAccept={handleAcceptTerms} />}
+      {showNotificare && !showTermsModal && <NotificareMotivatie onClose={handleCloseNotificare} />}
       {children}
     </>
   )
