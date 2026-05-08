@@ -27,30 +27,20 @@ export default function TermsGuard({ children }: { children: React.ReactNode }) 
         return
       }
 
-      // Sterge cache vechi fara terms_accepted
-      const cached = sessionStorage.getItem('pontaj_user')
-      if (cached) {
-        try {
-          const parsed = JSON.parse(cached)
-          if (parsed.terms_accepted === undefined) {
-            sessionStorage.removeItem('pontaj_user')
-          }
-        } catch {
-          sessionStorage.removeItem('pontaj_user')
-        }
-      }
+      sessionStorage.removeItem('pontaj_user')
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('app_users')
         .select('terms_accepted, notificare_motivatii_vazuta')
         .eq('id', user.id)
         .single()
 
+      console.log('TermsGuard check:', { data, error, pathname })
+
       if (!data?.terms_accepted && !pathname.startsWith('/terms')) {
-        // Termenii au prioritate
         setShowTermsModal(true)
       } else if (data?.terms_accepted && !data?.notificare_motivatii_vazuta) {
-        // Dupa termeni, arata notificarea
+        console.log('Showing notificare motivatii')
         setShowNotificare(true)
       }
 
@@ -61,18 +51,6 @@ export default function TermsGuard({ children }: { children: React.ReactNode }) 
 
   const handleAcceptTerms = () => {
     setShowTermsModal(false)
-
-    const cached = sessionStorage.getItem('pontaj_user')
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached)
-        parsed.terms_accepted = true
-        parsed.terms_accepted_at = new Date().toISOString()
-        sessionStorage.setItem('pontaj_user', JSON.stringify(parsed))
-      } catch {}
-    }
-
-    // Dupa acceptarea termenilor, arata notificarea
     setShowNotificare(true)
   }
 
