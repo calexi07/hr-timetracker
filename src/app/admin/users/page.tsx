@@ -8,6 +8,7 @@ const ROLURI = [
   { value: 'employee', label: 'Angajat' },
   { value: 'manager', label: 'Manager' },
   { value: 'director', label: 'Director' },
+  { value: 'hr', label: 'HR' },
   { value: 'admin', label: 'Administrator' },
 ]
 
