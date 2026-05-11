@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { cn } from '@/lib/utils'
 import toast from 'react-hot-toast'
 import { Save, Trash2, UserPlus, X, Eye, EyeOff, KeyRound, RotateCcw, CheckCircle2, XCircle } from 'lucide-react'
 
