@@ -35,8 +35,8 @@ export default function DashboardPage() {
         .single()
 
       if (!u || error) { router.push('/login'); return }
-     if (u.role === 'admin' && !u.employee_id) { router.push('/admin/upload'); return }
-if (u.role === 'hr') { router.push('/concedii'); return }
+      if (u.role === 'admin' && !u.employee_id) { router.push('/admin/upload'); return }
+      if (u.role === 'hr') { router.push('/concedii'); return }
 
       setAppUser(u)
 
@@ -114,7 +114,6 @@ if (u.role === 'hr') { router.push('/concedii'); return }
 
   const normaZi = appUser?.norma_ore ?? 8.25
 
-  // Calculeaza ore tinand cont de motivatii aprobate
   const totalHours = timesheets.reduce((s, r) => {
     if (r.motivatie_status === 'aprobat') return s + normaZi
     return s + Number(r.hours_worked)
