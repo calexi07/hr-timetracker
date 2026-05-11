@@ -35,7 +35,8 @@ export default function DashboardPage() {
         .single()
 
       if (!u || error) { router.push('/login'); return }
-      if (u.role === 'admin' && !u.employee_id) { router.push('/admin/upload'); return }
+     if (u.role === 'admin' && !u.employee_id) { router.push('/admin/upload'); return }
+if (u.role === 'hr') { router.push('/concedii'); return }
 
       setAppUser(u)
 
