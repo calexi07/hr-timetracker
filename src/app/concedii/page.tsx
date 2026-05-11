@@ -5,17 +5,18 @@ import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { format, differenceInBusinessDays, addDays } from 'date-fns'
 import { ro } from 'date-fns/locale'
-import { CalendarDays, Plus, X, Upload, FileText, Clock, CheckCircle, XCircle, Eye } from 'lucide-react'
+import { CalendarDays, Plus, X, Upload, FileText, Clock, CheckCircle, XCircle, Eye, Trash2 } from 'lucide-react'
 import Sidebar from '@/components/Sidebar'
 import toast from 'react-hot-toast'
 
 type TipConcediu = 'odihna' | 'medical'
-type StatusCerere = 'in_asteptare' | 'aprobat' | 'respins'
+type StatusCerere = 'in_asteptare' | 'aprobat' | 'respins' | 'anulat'
 
 const STATUS_BADGE: Record<StatusCerere, { label: string; color: string; icon: any }> = {
   in_asteptare: { label: 'In asteptare', color: 'bg-amber-100 text-amber-700', icon: Clock },
   aprobat: { label: 'Aprobat', color: 'bg-green-100 text-green-700', icon: CheckCircle },
   respins: { label: 'Respins', color: 'bg-red-100 text-red-700', icon: XCircle },
+  anulat: { label: 'Anulat', color: 'bg-slate-100 text-slate-500', icon: X },
 }
 
 export default function ConcediiPage() {
@@ -30,7 +31,7 @@ export default function ConcediiPage() {
   const [approveModal, setApproveModal] = useState<any>(null)
   const [raspunsManager, setRaspunsManager] = useState('')
   const [approvingId, setApprovingId] = useState<string | null>(null)
-  const [allUsers, setAllUsers] = useState<any[]>([])
+  const [anulandId, setAnulandId] = useState<string | null>(null)
 
   const [form, setForm] = useState({
     tip: 'odihna' as TipConcediu,
@@ -54,15 +55,6 @@ export default function ConcediiPage() {
       if (!u) { router.push('/login'); return }
       setAppUser(u)
 
-      // Incarca toti userii pentru HR/admin
-      if (u.role === 'hr' || u.role === 'admin') {
-        const { data: users } = await supabase
-          .from('app_users')
-          .select('id, name, email, role')
-          .order('name')
-        setAllUsers(users || [])
-      }
-
       await loadCereri(u)
       setLoading(false)
     }
@@ -75,10 +67,9 @@ export default function ConcediiPage() {
       .select('*, angajat:angajat_id(id, name, email, zile_concediu_total, zile_concediu_folosite)')
       .order('created_at', { ascending: false })
 
-    if (u.role === 'employee' || u.role === 'hr' && false) {
+    if (u.role === 'employee') {
       query = query.eq('angajat_id', u.id)
     } else if (u.role === 'manager') {
-      // Managerul vede cererile echipei sale
       const { data: echipa } = await supabase
         .from('app_users')
         .select('id')
@@ -86,10 +77,8 @@ export default function ConcediiPage() {
       const ids = (echipa || []).map((e: any) => e.id)
       ids.push(u.id)
       query = query.in('angajat_id', ids)
-    } else if (u.role === 'director') {
-      // Directorul vede toate
-    } else if (u.role === 'hr' || u.role === 'admin') {
-      // HR si admin vad toate
+    } else if (u.role === 'director' || u.role === 'hr' || u.role === 'admin') {
+      // vad toate
     } else {
       query = query.eq('angajat_id', u.id)
     }
@@ -122,7 +111,6 @@ export default function ConcediiPage() {
       return
     }
 
-    // Verifica zile disponibile pentru concediu odihna
     if (form.tip === 'odihna') {
       const zileDisponibile = (appUser.zile_concediu_total || 21) - (appUser.zile_concediu_folosite || 0)
       if (zile > zileDisponibile) {
@@ -136,7 +124,6 @@ export default function ConcediiPage() {
     let documentUrl = null
     let documentName = null
 
-    // Upload document medical
     if (form.tip === 'medical' && form.document) {
       const ext = form.document.name.split('.').pop()
       const fileName = `${appUser.id}/${Date.now()}.${ext}`
@@ -154,6 +141,9 @@ export default function ConcediiPage() {
       documentName = form.document.name
     }
 
+    // Concediul medical se aproba automat
+    const statusInitial = form.tip === 'medical' ? 'aprobat' : 'in_asteptare'
+
     const { error } = await supabase
       .from('cereri_concediu')
       .insert({
@@ -166,19 +156,66 @@ export default function ConcediiPage() {
         document_url: documentUrl,
         document_name: documentName,
         manager_id: appUser.manager_id || null,
-        status: 'in_asteptare'
+        status: statusInitial,
+        manager_decis_la: form.tip === 'medical' ? new Date().toISOString() : null,
+        manager_raspuns: form.tip === 'medical' ? 'Aprobat automat' : null,
       })
 
     if (error) {
       toast.error('Eroare: ' + error.message)
-    } else {
-      toast.success('Cerere trimisa cu succes!')
-      setShowForm(false)
-      setForm({ tip: 'odihna', data_start: '', data_sfarsit: '', motiv: '', document: null })
-      await loadCereri(appUser)
+      setSubmitting(false)
+      return
     }
 
+    // Daca medical, actualizeaza zilele folosite (nu se scad din odihna)
+    // Daca odihna aprobata mai tarziu, se scad atunci
+
+    toast.success(
+      form.tip === 'medical'
+        ? 'Cerere de concediu medical inregistrata si aprobata automat!'
+        : 'Cerere trimisa cu succes! Asteapta aprobarea managerului.'
+    )
+    setShowForm(false)
+    setForm({ tip: 'odihna', data_start: '', data_sfarsit: '', motiv: '', document: null })
+    await loadCereri(appUser)
     setSubmitting(false)
+  }
+
+  const handleAnulare = async (cerereId: string) => {
+    if (!confirm('Esti sigur ca vrei sa anulezi aceasta cerere?')) return
+    setAnulandId(cerereId)
+
+    const cerere = cereri.find(c => c.id === cerereId)
+
+    const { error } = await supabase
+      .from('cereri_concediu')
+      .update({ status: 'anulat' })
+      .eq('id', cerereId)
+
+    if (error) {
+      toast.error('Eroare: ' + error.message)
+      setAnulandId(null)
+      return
+    }
+
+    // Daca era aprobat si odihna, returneaza zilele
+    if (cerere?.status === 'aprobat' && cerere?.tip === 'odihna') {
+      await supabase
+        .from('app_users')
+        .update({
+          zile_concediu_folosite: Math.max(0, (appUser.zile_concediu_folosite || 0) - cerere.zile_lucratoare)
+        })
+        .eq('id', appUser.id)
+
+      setAppUser((prev: any) => ({
+        ...prev,
+        zile_concediu_folosite: Math.max(0, (prev.zile_concediu_folosite || 0) - cerere.zile_lucratoare)
+      }))
+    }
+
+    toast.success('Cerere anulata')
+    setAnulandId(null)
+    await loadCereri(appUser)
   }
 
   const handleDecizie = async (cerereId: string, decizie: 'aprobat' | 'respins') => {
@@ -202,7 +239,6 @@ export default function ConcediiPage() {
       return
     }
 
-    // Daca aprobat si concediu odihna, actualizeaza zilele folosite
     if (decizie === 'aprobat' && cerere.tip === 'odihna') {
       await supabase
         .from('app_users')
@@ -226,14 +262,10 @@ export default function ConcediiPage() {
     if (data?.signedUrl) window.open(data.signedUrl, '_blank')
   }
 
-  const getUserName = (id: string) => {
-    const u = allUsers.find(u => u.id === id)
-    return u?.name || '—'
-  }
-
   const isManagerOrAbove = appUser?.role === 'manager' || appUser?.role === 'director' || appUser?.role === 'hr' || appUser?.role === 'admin'
   const zileDisponibile = (appUser?.zile_concediu_total || 21) - (appUser?.zile_concediu_folosite || 0)
   const zileCerute = calcZileLucratoare(form.data_start, form.data_sfarsit)
+  const canCreateCerere = appUser?.role !== 'hr'
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -266,8 +298,8 @@ export default function ConcediiPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Tip:</span>
-                  <span className="font-medium text-slate-900 capitalize">
-                    {approveModal.tip === 'odihna' ? 'Concediu odihna' : 'Concediu medical'}
+                  <span className="font-medium">
+                    {approveModal.tip === 'odihna' ? '🏖️ Concediu odihna' : '🏥 Concediu medical'}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -279,7 +311,7 @@ export default function ConcediiPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Zile lucratoare:</span>
-                  <span className="font-medium text-slate-900">{approveModal.zile_lucratoare}</span>
+                  <span className="font-medium">{approveModal.zile_lucratoare}</span>
                 </div>
                 {approveModal.motiv && (
                   <div>
@@ -355,7 +387,7 @@ export default function ConcediiPage() {
                 )}
                 <div className="flex justify-between">
                   <span className="text-slate-500">Tip:</span>
-                  <span className="font-medium capitalize">
+                  <span className="font-medium">
                     {viewModal.tip === 'odihna' ? '🏖️ Concediu odihna' : '🏥 Concediu medical'}
                   </span>
                 </div>
@@ -380,7 +412,7 @@ export default function ConcediiPage() {
                     <p className="text-slate-700 mt-1 bg-slate-50 rounded-lg p-2">{viewModal.motiv}</p>
                   </div>
                 )}
-                {viewModal.manager_raspuns && (
+                {viewModal.manager_raspuns && viewModal.manager_raspuns !== 'Aprobat automat' && (
                   <div>
                     <span className="text-slate-500">Raspuns manager:</span>
                     <p className="text-slate-700 mt-1 bg-slate-50 rounded-lg p-2">{viewModal.manager_raspuns}</p>
@@ -414,21 +446,21 @@ export default function ConcediiPage() {
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Cereri Concediu</h1>
             <p className="text-slate-500 mt-1">
-              {isManagerOrAbove
-                ? 'Gestioneaza cererile de concediu ale echipei'
+              {isManagerOrAbove && appUser?.role !== 'employee'
+                ? 'Gestioneaza cererile de concediu'
                 : 'Cererile tale de concediu'}
             </p>
           </div>
-          {appUser?.role === 'employee' || appUser?.role === 'manager' || appUser?.role === 'director' || appUser?.role === 'admin' ? (
+          {canCreateCerere && (
             <button onClick={() => setShowForm(!showForm)} className="btn-primary">
               <Plus size={16} />
               Cerere noua
             </button>
-          ) : null}
+          )}
         </div>
 
-        {/* Carduri zile disponibile - doar pentru angajati */}
-        {(appUser?.role === 'employee' || appUser?.role === 'manager' || appUser?.role === 'director') && (
+        {/* Carduri zile disponibile */}
+        {appUser?.role !== 'hr' && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
             <div className="card p-5 bg-blue-50 border-blue-100">
               <p className="text-xs text-slate-500 font-medium mb-1">Zile totale</p>
@@ -485,6 +517,11 @@ export default function ConcediiPage() {
                     🏥 Medical
                   </button>
                 </div>
+                {form.tip === 'medical' && (
+                  <p className="text-xs text-green-600 mt-1.5 font-medium">
+                    ✓ Concediul medical se aproba automat
+                  </p>
+                )}
               </div>
 
               <div>
@@ -589,11 +626,7 @@ export default function ConcediiPage() {
             </div>
 
             <div className="flex gap-3">
-              <button
-                onClick={handleSubmit}
-                disabled={submitting}
-                className="btn-primary"
-              >
+              <button onClick={handleSubmit} disabled={submitting} className="btn-primary">
                 {submitting ? 'Se trimite...' : <><CalendarDays size={15} />Trimite cererea</>}
               </button>
               <button onClick={() => setShowForm(false)} className="btn-secondary">
@@ -611,9 +644,9 @@ export default function ConcediiPage() {
             </div>
             <h2 className="text-lg font-semibold text-slate-900 mb-2">Nicio cerere</h2>
             <p className="text-slate-500 text-sm">
-              {isManagerOrAbove
+              {isManagerOrAbove && appUser?.role !== 'employee'
                 ? 'Nu exista cereri de concediu momentan.'
-                : 'Nu ai nicio cerere de concediu. Creeaza una apasand butonul de mai sus.'}
+                : 'Nu ai nicio cerere de concediu.'}
             </p>
           </div>
         ) : (
@@ -636,11 +669,18 @@ export default function ConcediiPage() {
                 {cereri.map(cerere => {
                   const canApprove = isManagerOrAbove &&
                     cerere.status === 'in_asteptare' &&
+                    cerere.tip === 'odihna' &&
                     cerere.angajat_id !== appUser?.id &&
                     appUser?.role !== 'hr'
 
+                  const canAnula = cerere.angajat_id === appUser?.id &&
+                    (cerere.status === 'in_asteptare' || cerere.status === 'aprobat')
+
                   return (
-                    <tr key={cerere.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                    <tr key={cerere.id} className={cn(
+                      'border-b border-slate-50 hover:bg-slate-50 transition-colors',
+                      cerere.status === 'anulat' && 'opacity-50'
+                    )}>
                       {isManagerOrAbove && (
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
@@ -675,7 +715,7 @@ export default function ConcediiPage() {
                         {format(new Date(cerere.created_at), 'dd MMM yyyy', { locale: ro })}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2 justify-end">
+                        <div className="flex items-center gap-1 justify-end">
                           <button
                             onClick={() => setViewModal(cerere)}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all"
@@ -690,6 +730,16 @@ export default function ConcediiPage() {
                               title="Aproba / Respinge"
                             >
                               <CheckCircle size={15} />
+                            </button>
+                          )}
+                          {canAnula && (
+                            <button
+                              onClick={() => handleAnulare(cerere.id)}
+                              disabled={anulandId === cerere.id}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all disabled:opacity-50"
+                              title="Anuleaza cererea"
+                            >
+                              {anulandId === cerere.id ? <span className="text-xs">...</span> : <Trash2 size={15} />}
                             </button>
                           )}
                         </div>
