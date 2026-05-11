@@ -22,6 +22,10 @@ export default function Home() {
 
       if (u.role === 'manager' || u.role === 'director') {
         router.push('/team')
+      } else if (u.role === 'hr') {
+        router.push('/concedii')
+      } else if (u.role === 'admin' && !u.employee_id) {
+        router.push('/admin/upload')
       } else {
         router.push('/dashboard')
       }
