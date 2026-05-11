@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
-import { LayoutDashboard, Clock, Users, Upload, LogOut, ChevronRight, Shield, FileText, UsersRound } from 'lucide-react'
+import { LayoutDashboard, Clock, Users, Upload, LogOut, ChevronRight, Shield, FileText, UsersRound, CalendarDays } from 'lucide-react'
 import { useUser } from '@/components/UserContext'
 
 export default function Sidebar() {
@@ -22,17 +22,49 @@ export default function Sidebar() {
     if (user.role === 'admin') return 'Administrator'
     if (user.role === 'manager') return 'Manager'
     if (user.role === 'director') return 'Director'
+    if (user.role === 'hr') return 'HR'
     return 'Angajat'
   }
 
   const role = user?.role || ''
 
   const navItems = [
-    { label: 'Panou principal', href: '/dashboard', icon: <LayoutDashboard size={18} />, show: true },
-    { label: 'Echipa mea', href: '/team', icon: <UsersRound size={18} />, show: role === 'manager' || role === 'director' },
-    { label: 'Incarca date', href: '/admin/upload', icon: <Upload size={18} />, show: role === 'admin' },
-    { label: 'Gestionare angajati', href: '/admin/users', icon: <Users size={18} />, show: role === 'admin' },
-    { label: 'Istoric incarcari', href: '/admin/logs', icon: <FileText size={18} />, show: role === 'admin' },
+    {
+      label: 'Panou principal',
+      href: '/dashboard',
+      icon: <LayoutDashboard size={18} />,
+      show: true
+    },
+    {
+      label: 'Echipa mea',
+      href: '/team',
+      icon: <UsersRound size={18} />,
+      show: role === 'manager' || role === 'director'
+    },
+    {
+      label: 'Cereri concediu',
+      href: '/concedii',
+      icon: <CalendarDays size={18} />,
+      show: true
+    },
+    {
+      label: 'Incarca date',
+      href: '/admin/upload',
+      icon: <Upload size={18} />,
+      show: role === 'admin'
+    },
+    {
+      label: 'Gestionare angajati',
+      href: '/admin/users',
+      icon: <Users size={18} />,
+      show: role === 'admin'
+    },
+    {
+      label: 'Istoric incarcari',
+      href: '/admin/logs',
+      icon: <FileText size={18} />,
+      show: role === 'admin'
+    },
   ].filter(n => n.show)
 
   const initials = user?.name?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || '?'
@@ -75,14 +107,11 @@ export default function Sidebar() {
       <div className="mx-4 border-t border-blue-700/50" />
 
       <div className="p-4 shrink-0">
-        {/* Nume clickabil -> profil */}
         <Link
           href="/profile"
           className={cn(
             'flex items-center gap-3 px-3 py-2.5 rounded-xl mb-2 transition-all group',
-            pathname === '/profile'
-              ? 'bg-blue-500'
-              : 'bg-blue-800/50 hover:bg-blue-700/50'
+            pathname === '/profile' ? 'bg-blue-500' : 'bg-blue-800/50 hover:bg-blue-700/50'
           )}
         >
           <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-semibold shrink-0 group-hover:bg-blue-400 transition-all">
@@ -92,6 +121,7 @@ export default function Sidebar() {
             <p className="text-white text-xs font-medium truncate">{displayName}</p>
             <div className="flex items-center gap-1 mt-0.5">
               {role === 'admin' && <Shield size={10} className="text-blue-400" />}
+              {role === 'hr' && <Shield size={10} className="text-pink-400" />}
               <span className="text-blue-400 text-xs">{getRolLabel()}</span>
             </div>
           </div>
