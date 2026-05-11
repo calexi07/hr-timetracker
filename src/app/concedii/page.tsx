@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
@@ -33,13 +33,17 @@ export default function ConcediiPage() {
   const [approvingId, setApprovingId] = useState<string | null>(null)
   const [anulandId, setAnulandId] = useState<string | null>(null)
 
-  const [form, setForm] = useState({
-    tip: 'odihna' as TipConcediu,
-    data_start: '',
-    data_sfarsit: '',
-    motiv: '',
-    document: null as File | null,
-  })
+  const [tip, setTip] = useState<TipConcediu>('odihna')
+  const [dataStart, setDataStart] = useState('')
+  const [dataSfarsit, setDataSfarsit] = useState('')
+  const [motiv, setMotiv] = useState('')
+  const [document, setDocument] = useState<File | null>(null)
+
+  const tipRef = useRef<TipConcediu>('odihna')
+
+  useEffect(() => {
+    tipRef.current = tip
+  }, [tip])
 
   useEffect(() => {
     const init = async () => {
@@ -77,11 +81,8 @@ export default function ConcediiPage() {
       const ids = (echipa || []).map((e: any) => e.id)
       ids.push(u.id)
       query = query.in('angajat_id', ids)
-    } else if (u.role === 'director' || u.role === 'hr' || u.role === 'admin') {
-      // vad toate
-    } else {
-      query = query.eq('angajat_id', u.id)
     }
+    // director, hr, admin vad toate
 
     const { data } = await query
     setCereri(data || [])
@@ -95,23 +96,33 @@ export default function ConcediiPage() {
     return differenceInBusinessDays(addDays(e, 1), s)
   }
 
+  const resetForm = () => {
+    setTip('odihna')
+    setDataStart('')
+    setDataSfarsit('')
+    setMotiv('')
+    setDocument(null)
+  }
+
   const handleSubmit = async () => {
-    if (!form.data_start || !form.data_sfarsit) {
+    const currentTip = tipRef.current
+
+    if (!dataStart || !dataSfarsit) {
       toast.error('Selecteaza perioada')
       return
     }
-    if (form.tip === 'medical' && !form.document) {
+    if (currentTip === 'medical' && !document) {
       toast.error('Documentul medical este obligatoriu')
       return
     }
 
-    const zile = calcZileLucratoare(form.data_start, form.data_sfarsit)
+    const zile = calcZileLucratoare(dataStart, dataSfarsit)
     if (zile <= 0) {
       toast.error('Perioada invalida')
       return
     }
 
-    if (form.tip === 'odihna') {
+    if (currentTip === 'odihna') {
       const zileDisponibile = (appUser.zile_concediu_total || 21) - (appUser.zile_concediu_folosite || 0)
       if (zile > zileDisponibile) {
         toast.error(`Nu ai suficiente zile disponibile. Disponibil: ${zileDisponibile} zile`)
@@ -124,12 +135,12 @@ export default function ConcediiPage() {
     let documentUrl = null
     let documentName = null
 
-    if (form.tip === 'medical' && form.document) {
-      const ext = form.document.name.split('.').pop()
+    if (currentTip === 'medical' && document) {
+      const ext = document.name.split('.').pop()
       const fileName = `${appUser.id}/${Date.now()}.${ext}`
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('documente-medicale')
-        .upload(fileName, form.document)
+        .upload(fileName, document)
 
       if (uploadError) {
         toast.error('Eroare la upload document: ' + uploadError.message)
@@ -138,27 +149,30 @@ export default function ConcediiPage() {
       }
 
       documentUrl = uploadData.path
-      documentName = form.document.name
+      documentName = document.name
     }
 
     // Concediul medical se aproba automat
-    const statusInitial = form.tip === 'medical' ? 'aprobat' : 'in_asteptare'
+    const isMedical = currentTip === 'medical'
+    const statusFinal = isMedical ? 'aprobat' : 'in_asteptare'
+
+    console.log('Submitting cerere:', { currentTip, statusFinal, isMedical })
 
     const { error } = await supabase
       .from('cereri_concediu')
       .insert({
         angajat_id: appUser.id,
-        tip: form.tip,
-        data_start: form.data_start,
-        data_sfarsit: form.data_sfarsit,
+        tip: currentTip,
+        data_start: dataStart,
+        data_sfarsit: dataSfarsit,
         zile_lucratoare: zile,
-        motiv: form.motiv || null,
+        motiv: motiv || null,
         document_url: documentUrl,
         document_name: documentName,
         manager_id: appUser.manager_id || null,
-        status: statusInitial,
-        manager_decis_la: form.tip === 'medical' ? new Date().toISOString() : null,
-        manager_raspuns: form.tip === 'medical' ? 'Aprobat automat' : null,
+        status: statusFinal,
+        manager_decis_la: isMedical ? new Date().toISOString() : null,
+        manager_raspuns: isMedical ? 'Aprobat automat' : null,
       })
 
     if (error) {
@@ -167,16 +181,13 @@ export default function ConcediiPage() {
       return
     }
 
-    // Daca medical, actualizeaza zilele folosite (nu se scad din odihna)
-    // Daca odihna aprobata mai tarziu, se scad atunci
-
     toast.success(
-      form.tip === 'medical'
+      isMedical
         ? 'Cerere de concediu medical inregistrata si aprobata automat!'
         : 'Cerere trimisa cu succes! Asteapta aprobarea managerului.'
     )
     setShowForm(false)
-    setForm({ tip: 'odihna', data_start: '', data_sfarsit: '', motiv: '', document: null })
+    resetForm()
     await loadCereri(appUser)
     setSubmitting(false)
   }
@@ -200,17 +211,13 @@ export default function ConcediiPage() {
 
     // Daca era aprobat si odihna, returneaza zilele
     if (cerere?.status === 'aprobat' && cerere?.tip === 'odihna') {
+      const noileZile = Math.max(0, (appUser.zile_concediu_folosite || 0) - cerere.zile_lucratoare)
       await supabase
         .from('app_users')
-        .update({
-          zile_concediu_folosite: Math.max(0, (appUser.zile_concediu_folosite || 0) - cerere.zile_lucratoare)
-        })
+        .update({ zile_concediu_folosite: noileZile })
         .eq('id', appUser.id)
 
-      setAppUser((prev: any) => ({
-        ...prev,
-        zile_concediu_folosite: Math.max(0, (prev.zile_concediu_folosite || 0) - cerere.zile_lucratoare)
-      }))
+      setAppUser((prev: any) => ({ ...prev, zile_concediu_folosite: noileZile }))
     }
 
     toast.success('Cerere anulata')
@@ -264,7 +271,7 @@ export default function ConcediiPage() {
 
   const isManagerOrAbove = appUser?.role === 'manager' || appUser?.role === 'director' || appUser?.role === 'hr' || appUser?.role === 'admin'
   const zileDisponibile = (appUser?.zile_concediu_total || 21) - (appUser?.zile_concediu_folosite || 0)
-  const zileCerute = calcZileLucratoare(form.data_start, form.data_sfarsit)
+  const zileCerute = calcZileLucratoare(dataStart, dataSfarsit)
   const canCreateCerere = appUser?.role !== 'hr'
 
   if (loading) return (
@@ -485,7 +492,7 @@ export default function ConcediiPage() {
           <div className="card p-6 mb-8 border-blue-100 bg-blue-50">
             <div className="flex items-center justify-between mb-5">
               <h2 className="font-semibold text-slate-900">Cerere noua de concediu</h2>
-              <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => { setShowForm(false); resetForm() }} className="text-slate-400 hover:text-slate-600">
                 <X size={18} />
               </button>
             </div>
@@ -495,10 +502,10 @@ export default function ConcediiPage() {
                 <label className="block text-xs font-medium text-slate-600 mb-1.5">Tip concediu</label>
                 <div className="flex gap-3">
                   <button
-                    onClick={() => setForm(f => ({ ...f, tip: 'odihna', document: null }))}
+                    onClick={() => { setTip('odihna'); tipRef.current = 'odihna'; setDocument(null) }}
                     className={cn(
                       'flex-1 py-2.5 px-3 rounded-xl border text-sm font-medium transition-all',
-                      form.tip === 'odihna'
+                      tip === 'odihna'
                         ? 'bg-blue-600 text-white border-blue-600'
                         : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
                     )}
@@ -506,10 +513,10 @@ export default function ConcediiPage() {
                     🏖️ Odihna
                   </button>
                   <button
-                    onClick={() => setForm(f => ({ ...f, tip: 'medical' }))}
+                    onClick={() => { setTip('medical'); tipRef.current = 'medical' }}
                     className={cn(
                       'flex-1 py-2.5 px-3 rounded-xl border text-sm font-medium transition-all',
-                      form.tip === 'medical'
+                      tip === 'medical'
                         ? 'bg-blue-600 text-white border-blue-600'
                         : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
                     )}
@@ -517,7 +524,7 @@ export default function ConcediiPage() {
                     🏥 Medical
                   </button>
                 </div>
-                {form.tip === 'medical' && (
+                {tip === 'medical' && (
                   <p className="text-xs text-green-600 mt-1.5 font-medium">
                     ✓ Concediul medical se aproba automat
                   </p>
@@ -532,11 +539,11 @@ export default function ConcediiPage() {
                   {zileCerute > 0 ? (
                     <span className={cn(
                       'font-bold',
-                      form.tip === 'odihna' && zileCerute > zileDisponibile
+                      tip === 'odihna' && zileCerute > zileDisponibile
                         ? 'text-red-600' : 'text-blue-600'
                     )}>
                       {zileCerute} zile
-                      {form.tip === 'odihna' && zileCerute > zileDisponibile && (
+                      {tip === 'odihna' && zileCerute > zileDisponibile && (
                         <span className="text-red-500 font-normal ml-2">— insuficiente!</span>
                       )}
                     </span>
@@ -550,9 +557,9 @@ export default function ConcediiPage() {
                 <label className="block text-xs font-medium text-slate-600 mb-1.5">Data inceput</label>
                 <input
                   type="date"
-                  value={form.data_start}
+                  value={dataStart}
                   min={format(new Date(), 'yyyy-MM-dd')}
-                  onChange={e => setForm(f => ({ ...f, data_start: e.target.value }))}
+                  onChange={e => setDataStart(e.target.value)}
                   className="input"
                 />
               </div>
@@ -561,9 +568,9 @@ export default function ConcediiPage() {
                 <label className="block text-xs font-medium text-slate-600 mb-1.5">Data sfarsit</label>
                 <input
                   type="date"
-                  value={form.data_sfarsit}
-                  min={form.data_start || format(new Date(), 'yyyy-MM-dd')}
-                  onChange={e => setForm(f => ({ ...f, data_sfarsit: e.target.value }))}
+                  value={dataSfarsit}
+                  min={dataStart || format(new Date(), 'yyyy-MM-dd')}
+                  onChange={e => setDataSfarsit(e.target.value)}
                   className="input"
                 />
               </div>
@@ -573,29 +580,29 @@ export default function ConcediiPage() {
                   Motiv <span className="text-slate-400 font-normal">(optional)</span>
                 </label>
                 <textarea
-                  value={form.motiv}
-                  onChange={e => setForm(f => ({ ...f, motiv: e.target.value }))}
+                  value={motiv}
+                  onChange={e => setMotiv(e.target.value)}
                   placeholder="Detalii suplimentare..."
                   rows={2}
                   className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 />
               </div>
 
-              {form.tip === 'medical' && (
+              {tip === 'medical' && (
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-medium text-slate-600 mb-1.5">
                     Document medical <span className="text-red-500">*obligatoriu</span>
                   </label>
                   <div className={cn(
                     'border-2 border-dashed rounded-xl p-4 text-center transition-all',
-                    form.document ? 'border-green-300 bg-green-50' : 'border-slate-200 bg-white hover:border-blue-300'
+                    document ? 'border-green-300 bg-green-50' : 'border-slate-200 bg-white hover:border-blue-300'
                   )}>
-                    {form.document ? (
+                    {document ? (
                       <div className="flex items-center justify-center gap-2 text-green-700">
                         <FileText size={16} />
-                        <span className="text-sm font-medium">{form.document.name}</span>
+                        <span className="text-sm font-medium">{document.name}</span>
                         <button
-                          onClick={() => setForm(f => ({ ...f, document: null }))}
+                          onClick={() => setDocument(null)}
                           className="text-red-400 hover:text-red-600 ml-2"
                         >
                           <X size={14} />
@@ -612,7 +619,7 @@ export default function ConcediiPage() {
                           className="hidden"
                           onChange={e => {
                             const file = e.target.files?.[0]
-                            if (file) setForm(f => ({ ...f, document: file }))
+                            if (file) setDocument(file)
                           }}
                         />
                       </label>
@@ -629,7 +636,7 @@ export default function ConcediiPage() {
               <button onClick={handleSubmit} disabled={submitting} className="btn-primary">
                 {submitting ? 'Se trimite...' : <><CalendarDays size={15} />Trimite cererea</>}
               </button>
-              <button onClick={() => setShowForm(false)} className="btn-secondary">
+              <button onClick={() => { setShowForm(false); resetForm() }} className="btn-secondary">
                 Anuleaza
               </button>
             </div>
