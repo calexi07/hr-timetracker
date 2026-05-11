@@ -12,7 +12,7 @@ const ROLURI = [
   { value: 'admin', label: 'Administrator' },
 ]
 
-const ROLURI_CU_MANAGER = ['employee', 'manager', 'admin', 'director']
+const ROLURI_CU_MANAGER = ['employee', 'manager', 'admin', 'director', 'hr']
 
 export default function UsersPage() {
   const [users, setUsers] = useState<any[]>([])
@@ -244,12 +244,19 @@ export default function UsersPage() {
     }))
   }
 
-  // Formateaza norma pentru afisare
   const formatNorma = (ore: number) => {
     const h = Math.floor(ore)
     const m = Math.round((ore - h) * 60)
     if (m === 0) return `${h}h`
     return `${h}h ${m}m`
+  }
+
+  const getRolColor = (role: string) => {
+    if (role === 'admin') return 'bg-slate-100 text-slate-700'
+    if (role === 'manager') return 'bg-purple-100 text-purple-700'
+    if (role === 'director') return 'bg-blue-100 text-blue-700'
+    if (role === 'hr') return 'bg-pink-100 text-pink-700'
+    return 'bg-green-100 text-green-700'
   }
 
   if (loading) return <div className="p-8 text-slate-400">Se incarca...</div>
@@ -334,8 +341,8 @@ export default function UsersPage() {
       </div>
 
       <div className="card p-4 mb-6 bg-blue-50 border-blue-100 text-sm text-blue-800">
-        <strong>Norma de ore</strong> — implicit 8h 15m (8.25). Modifica pentru angajatii cu program diferit (ex: part-time, ture).
-        Dashboardul fiecarui angajat va folosi automat norma setata.
+        <strong>Norma de ore</strong> — implicit 8h 15m (8.25). Modifica pentru angajatii cu program diferit.
+        Rolul <strong>HR</strong> are acces la cererile de concediu si documentele medicale.
       </div>
 
       {showForm && (
@@ -386,7 +393,7 @@ export default function UsersPage() {
               <input type="number" step="0.25" min="0.25" max="24" placeholder="8.25"
                 value={newUser.norma_ore}
                 onChange={e => setNewUser({ ...newUser, norma_ore: e.target.value })} className="input" />
-              <p className="text-xs text-slate-400 mt-1">Ex: 8.25 = 8h 15m, 4.0 = 4h, 6.5 = 6h 30m</p>
+              <p className="text-xs text-slate-400 mt-1">Ex: 8.25 = 8h 15m, 4.0 = 4h</p>
             </div>
             {ROLURI_CU_MANAGER.includes(newUser.role) && (
               <div>
@@ -439,7 +446,10 @@ export default function UsersPage() {
                 <tr key={user.id} className="border-b border-slate-50 hover:bg-slate-50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xs font-semibold shrink-0">
+                      <div className={cn(
+                        'w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0',
+                        getRolColor(user.role)
+                      )}>
                         {(edit?.name || user.name)?.charAt(0)?.toUpperCase() || '?'}
                       </div>
                       <span className="text-slate-500 text-xs">{user.email}</span>
@@ -465,15 +475,10 @@ export default function UsersPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        step="0.25"
-                        min="0.25"
-                        max="24"
+                      <input type="number" step="0.25" min="0.25" max="24"
                         value={currentNorma}
                         onChange={e => setEdit(user.id, 'norma_ore', e.target.value, user)}
-                        className="input py-1.5 w-20"
-                      />
+                        className="input py-1.5 w-20" />
                       <span className="text-xs text-slate-400 shrink-0">
                         {formatNorma(parseFloat(currentNorma) || 8.25)}
                       </span>
@@ -486,9 +491,7 @@ export default function UsersPage() {
                         className="input py-1.5 w-32">
                         <option value="">— Fara —</option>
                         {getPosibiliManageri(user.id).map(m => (
-                          <option key={m.id} value={m.id}>
-                            {m.name}
-                          </option>
+                          <option key={m.id} value={m.id}>{m.name}</option>
                         ))}
                       </select>
                     ) : (
@@ -512,12 +515,9 @@ export default function UsersPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => openCredModal(user)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-xs font-medium hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-all"
-                    >
-                      <KeyRound size={13} />
-                      Email / PIN
+                    <button onClick={() => openCredModal(user)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-xs font-medium hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-all">
+                      <KeyRound size={13} />Email / PIN
                     </button>
                   </td>
                   <td className="px-4 py-3">
