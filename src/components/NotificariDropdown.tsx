@@ -33,8 +33,10 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
   const [notificari, setNotificari] = useState<Notificare[]>([])
   const [approveModal, setApproveModal] = useState<Notificare | null>(null)
   const [raspuns, setRaspuns] = useState('')
+  const [tipAprobare, setTipAprobare] = useState<'fara_recuperare' | 'cu_recuperare'>('fara_recuperare')
   const [saving, setSaving] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [step, setStep] = useState<'decizie' | 'tip_aprobare'>('decizie')
 
   const nerezolvate = notificari.filter(n => !n.rezolvata)
   const count = nerezolvate.length
@@ -83,43 +85,75 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
     }
   }
 
-  const handleDecizie = async (notificare: Notificare, decizie: 'aprobat' | 'respins') => {
+  const handleRespinge = async (notificare: Notificare) => {
     setSaving(true)
 
     const updateData = {
-      motivatie_status: decizie,
+      motivatie_status: 'respins',
       motivatie_aprobata_de: userId,
       motivatie_aprobata_la: new Date().toISOString(),
-      motivatie_raspuns: raspuns.trim() || null
+      motivatie_raspuns: raspuns.trim() || null,
+      motivatie_tip_aprobare: null,
     }
 
     let success = false
 
     if (notificare.timesheet_id) {
-      const { error } = await supabase
-        .from('timesheets')
-        .update(updateData)
-        .eq('id', notificare.timesheet_id)
+      const { error } = await supabase.from('timesheets').update(updateData).eq('id', notificare.timesheet_id)
       success = !error
       if (error) toast.error('Eroare: ' + error.message)
     } else if (notificare.observatie_id) {
-      const { error } = await supabase
-        .from('observatii_zile')
-        .update(updateData)
-        .eq('id', notificare.observatie_id)
+      const { error } = await supabase.from('observatii_zile').update(updateData).eq('id', notificare.observatie_id)
       success = !error
       if (error) toast.error('Eroare: ' + error.message)
     }
 
     if (success) {
-      await supabase
-        .from('notificari')
-        .update({ rezolvata: true, citita: true })
-        .eq('id', notificare.id)
-
-      toast.success(decizie === 'aprobat' ? 'Motivatie aprobata' : 'Motivatie respinsa')
+      await supabase.from('notificari').update({ rezolvata: true, citita: true }).eq('id', notificare.id)
+      toast.success('Motivatie respinsa')
       setApproveModal(null)
       setRaspuns('')
+      setStep('decizie')
+      await loadNotificari()
+    }
+
+    setSaving(false)
+  }
+
+  const handleAproba = async (notificare: Notificare) => {
+    setSaving(true)
+
+    const updateData: any = {
+      motivatie_status: 'aprobat',
+      motivatie_aprobata_de: userId,
+      motivatie_aprobata_la: new Date().toISOString(),
+      motivatie_raspuns: raspuns.trim() || null,
+      motivatie_tip_aprobare: tipAprobare,
+    }
+
+    let success = false
+
+    if (notificare.timesheet_id) {
+      const { error } = await supabase.from('timesheets').update(updateData).eq('id', notificare.timesheet_id)
+      success = !error
+      if (error) toast.error('Eroare: ' + error.message)
+    } else if (notificare.observatie_id) {
+      const { error } = await supabase.from('observatii_zile').update(updateData).eq('id', notificare.observatie_id)
+      success = !error
+      if (error) toast.error('Eroare: ' + error.message)
+    }
+
+    if (success) {
+      await supabase.from('notificari').update({ rezolvata: true, citita: true }).eq('id', notificare.id)
+      toast.success(
+        tipAprobare === 'fara_recuperare'
+          ? 'Motivatie aprobata — ziua devine 8h 15m'
+          : 'Motivatie aprobata — se recupereaza intr-o alta zi'
+      )
+      setApproveModal(null)
+      setRaspuns('')
+      setTipAprobare('fara_recuperare')
+      setStep('decizie')
       await loadNotificari()
     }
 
@@ -133,148 +167,110 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
     return `${h}h ${m}m`
   }
 
-  const portal = mounted && open ? createPortal(
+  const openApproveModal = (n: Notificare) => {
+    setApproveModal(n)
+    setRaspuns('')
+    setTipAprobare('fara_recuperare')
+    setStep('decizie')
+  }
+
+  const portal = mounted ? createPortal(
     <>
-      {/* Overlay complet peste tot */}
-      <div
-        style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 99998,
-          background: 'rgba(0,0,0,0.4)',
-        }}
-        onClick={() => setOpen(false)}
-      />
-
-      {/* Panel notificari — montat direct in body */}
-      <div
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: '256px', // latimea sidebar-ului (w-64 = 256px)
-          height: '100vh',
-          width: '320px',
-          background: 'white',
-          zIndex: 99999,
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '4px 0 24px rgba(0,0,0,0.15)',
-        }}
-      >
-        {/* Header */}
-        <div style={{
-          padding: '16px',
-          borderBottom: '1px solid #f1f5f9',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexShrink: 0,
-          background: 'white',
-        }}>
-          <div>
-            <p style={{ fontWeight: 600, color: '#0f172a', fontSize: '14px', margin: 0 }}>Notificari</p>
-            <p style={{ fontSize: '12px', color: '#94a3b8', margin: '2px 0 0 0' }}>
-              {count === 0 ? 'Nicio notificare noua' : `${count} motivatii de rezolvat`}
-            </p>
-          </div>
-          <button
+      {/* Panel notificari */}
+      {open && (
+        <>
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 99998, background: 'rgba(0,0,0,0.4)' }}
             onClick={() => setOpen(false)}
-            style={{
-              padding: '6px',
-              borderRadius: '8px',
-              border: 'none',
-              background: 'none',
-              cursor: 'pointer',
-              color: '#94a3b8',
-              display: 'flex',
-              alignItems: 'center',
-            }}
-          >
-            <X size={15} />
-          </button>
-        </div>
-
-        {/* Lista */}
-        <div style={{ flex: 1, overflowY: 'auto' }}>
-          {notificari.length === 0 ? (
-            <div style={{ padding: '32px', textAlign: 'center', marginTop: '16px' }}>
-              <div style={{
-                width: '56px', height: '56px', borderRadius: '50%',
-                background: '#f1f5f9', display: 'flex', alignItems: 'center',
-                justifyContent: 'center', margin: '0 auto 12px'
+          />
+          <div style={{
+            position: 'fixed', top: 0, left: '256px', height: '100vh', width: '320px',
+            background: 'white', zIndex: 99999, display: 'flex', flexDirection: 'column',
+            boxShadow: '4px 0 24px rgba(0,0,0,0.15)',
+          }}>
+            <div style={{
+              padding: '16px', borderBottom: '1px solid #f1f5f9',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              flexShrink: 0, background: 'white',
+            }}>
+              <div>
+                <p style={{ fontWeight: 600, color: '#0f172a', fontSize: '14px', margin: 0 }}>Notificari</p>
+                <p style={{ fontSize: '12px', color: '#94a3b8', margin: '2px 0 0 0' }}>
+                  {count === 0 ? 'Nicio notificare noua' : `${count} motivatii de rezolvat`}
+                </p>
+              </div>
+              <button onClick={() => setOpen(false)} style={{
+                padding: '6px', borderRadius: '8px', border: 'none',
+                background: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center',
               }}>
-                <Bell size={24} color="#cbd5e1" />
-              </div>
-              <p style={{ fontSize: '14px', color: '#64748b', fontWeight: 500, margin: '0 0 4px' }}>
-                Nicio motivatie in asteptare
-              </p>
-              <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>
-                Vei fi notificat cand apar motivatii noi
-              </p>
+                <X size={15} />
+              </button>
             </div>
-          ) : (
-            notificari.map((n, i) => (
-              <div
-                key={n.id}
-                style={{
-                  padding: '16px',
-                  borderBottom: i < notificari.length - 1 ? '1px solid #f8fafc' : 'none',
-                  background: !n.citita ? '#eff6ff' : 'white',
-                  borderLeft: !n.citita ? '3px solid #3b82f6' : '3px solid transparent',
-                }}
-              >
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              {notificari.length === 0 ? (
+                <div style={{ padding: '32px', textAlign: 'center', marginTop: '16px' }}>
                   <div style={{
-                    width: '36px', height: '36px', borderRadius: '50%',
-                    background: '#fef3c7', display: 'flex', alignItems: 'center',
-                    justifyContent: 'center', color: '#d97706',
-                    fontWeight: 600, fontSize: '14px', flexShrink: 0,
+                    width: '56px', height: '56px', borderRadius: '50%', background: '#f1f5f9',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px',
                   }}>
-                    {n.angajat_name?.charAt(0)?.toUpperCase() || '?'}
+                    <Bell size={24} color="#cbd5e1" />
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
-                      <p style={{ fontSize: '12px', fontWeight: 600, color: '#0f172a', margin: 0 }}>
-                        {n.angajat_name}
-                      </p>
-                      {!n.citita && (
-                        <span style={{
-                          width: '8px', height: '8px', borderRadius: '50%',
-                          background: '#3b82f6', flexShrink: 0,
-                        }} />
-                      )}
-                    </div>
-                    <p style={{ fontSize: '11px', color: '#94a3b8', margin: '0 0 8px' }}>
-                      {n.date_referinta && format(parseISO(n.date_referinta), 'dd MMM yyyy', { locale: ro })}
-                    </p>
-                    <div style={{
-                      background: '#f8fafc', border: '1px solid #e2e8f0',
-                      borderRadius: '8px', padding: '8px 12px', marginBottom: '10px',
-                    }}>
-                      <p style={{ fontSize: '12px', color: '#475569', fontStyle: 'italic', margin: 0 }}>
-                        "{n.mesaj}"
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => { setApproveModal(n); setRaspuns('') }}
-                      style={{
-                        width: '100%', padding: '8px', borderRadius: '8px',
-                        border: '1px solid #fcd34d', background: '#fffbeb',
-                        color: '#b45309', fontSize: '12px', fontWeight: 500,
-                        cursor: 'pointer', display: 'flex', alignItems: 'center',
-                        justifyContent: 'center', gap: '6px',
-                      }}
-                    >
-                      <MessageSquare size={12} />
-                      Aproba / Respinge
-                    </button>
-                  </div>
+                  <p style={{ fontSize: '14px', color: '#64748b', fontWeight: 500, margin: '0 0 4px' }}>
+                    Nicio motivatie in asteptare
+                  </p>
+                  <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>
+                    Vei fi notificat cand apar motivatii noi
+                  </p>
                 </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
+              ) : (
+                notificari.map((n, i) => (
+                  <div key={n.id} style={{
+                    padding: '16px',
+                    borderBottom: i < notificari.length - 1 ? '1px solid #f8fafc' : 'none',
+                    background: !n.citita ? '#eff6ff' : 'white',
+                    borderLeft: !n.citita ? '3px solid #3b82f6' : '3px solid transparent',
+                  }}>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                      <div style={{
+                        width: '36px', height: '36px', borderRadius: '50%', background: '#fef3c7',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: '#d97706', fontWeight: 600, fontSize: '14px', flexShrink: 0,
+                      }}>
+                        {n.angajat_name?.charAt(0)?.toUpperCase() || '?'}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
+                          <p style={{ fontSize: '12px', fontWeight: 600, color: '#0f172a', margin: 0 }}>{n.angajat_name}</p>
+                          {!n.citita && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#3b82f6', flexShrink: 0 }} />}
+                        </div>
+                        <p style={{ fontSize: '11px', color: '#94a3b8', margin: '0 0 8px' }}>
+                          {n.date_referinta && format(parseISO(n.date_referinta), 'dd MMM yyyy', { locale: ro })}
+                        </p>
+                        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px 12px', marginBottom: '10px' }}>
+                          <p style={{ fontSize: '12px', color: '#475569', fontStyle: 'italic', margin: 0 }}>"{n.mesaj}"</p>
+                        </div>
+                        <button
+                          onClick={() => openApproveModal(n)}
+                          style={{
+                            width: '100%', padding: '8px', borderRadius: '8px',
+                            border: '1px solid #fcd34d', background: '#fffbeb',
+                            color: '#b45309', fontSize: '12px', fontWeight: 500,
+                            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                          }}
+                        >
+                          <MessageSquare size={12} />
+                          Aproba / Respinge
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Modal decizie */}
       {approveModal && (
@@ -284,29 +280,31 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
         }}>
           <div
             style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }}
-            onClick={() => setApproveModal(null)}
+            onClick={() => { setApproveModal(null); setStep('decizie') }}
           />
           <div style={{
             position: 'relative', background: 'white', borderRadius: '16px',
             boxShadow: '0 25px 50px rgba(0,0,0,0.25)', width: '100%', maxWidth: '448px', padding: '24px',
           }}>
+            {/* Header */}
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '16px' }}>
               <div>
                 <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#0f172a', margin: '0 0 4px' }}>
-                  Aprobare motivatie
+                  {step === 'decizie' ? 'Decizie motivatie' : 'Tip aprobare'}
                 </h3>
                 <p style={{ fontSize: '14px', color: '#94a3b8', margin: 0 }}>
                   {approveModal.angajat_name} · {approveModal.date_referinta && format(parseISO(approveModal.date_referinta), 'dd MMM yyyy', { locale: ro })}
                 </p>
               </div>
               <button
-                onClick={() => setApproveModal(null)}
+                onClick={() => { setApproveModal(null); setStep('decizie') }}
                 style={{ padding: '6px', borderRadius: '8px', border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}
               >
                 <X size={18} />
               </button>
             </div>
 
+            {/* Motivatia angajatului */}
             <div style={{ marginBottom: '16px' }}>
               <p style={{ fontSize: '12px', fontWeight: 500, color: '#64748b', marginBottom: '6px' }}>
                 Motivatia angajatului
@@ -318,73 +316,151 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
               </div>
             </div>
 
-            <div style={{
-              background: '#fffbeb', border: '1px solid #fde68a',
-              borderRadius: '12px', padding: '12px', marginBottom: '16px',
-              fontSize: '12px', color: '#b45309',
-            }}>
-              Daca aprobi, orele zilei vor fi considerate <strong>{formatNorma(normaZi)}</strong> si diferenta va fi <strong>±0m</strong>.
-            </div>
+            {step === 'decizie' ? (
+              <>
+                {/* Raspuns */}
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, color: '#64748b', marginBottom: '6px' }}>
+                    Raspunsul tau <span style={{ color: '#94a3b8', fontWeight: 400 }}>(optional)</span>
+                  </label>
+                  <textarea
+                    value={raspuns}
+                    onChange={e => setRaspuns(e.target.value)}
+                    placeholder="Ex: Aprobat. / Respins — lipsit nemotivat."
+                    rows={3}
+                    style={{
+                      width: '100%', padding: '10px 12px', borderRadius: '12px',
+                      border: '1px solid #e2e8f0', fontSize: '14px', color: '#0f172a',
+                      resize: 'none', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit',
+                    }}
+                  />
+                </div>
 
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, color: '#64748b', marginBottom: '6px' }}>
-                Raspunsul tau <span style={{ color: '#94a3b8', fontWeight: 400 }}>(optional)</span>
-              </label>
-              <textarea
-                value={raspuns}
-                onChange={e => setRaspuns(e.target.value)}
-                placeholder="Ex: Aprobat, conform politicii companiei."
-                rows={3}
-                style={{
-                  width: '100%', padding: '10px 12px', borderRadius: '12px',
-                  border: '1px solid #e2e8f0', fontSize: '14px', color: '#0f172a',
-                  resize: 'none', outline: 'none', boxSizing: 'border-box',
-                  fontFamily: 'inherit',
-                }}
-              />
-            </div>
+                {/* Butoane decizie */}
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button
+                    onClick={() => handleRespinge(approveModal)}
+                    disabled={saving}
+                    style={{
+                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      gap: '8px', padding: '10px', borderRadius: '12px',
+                      border: '1px solid #fecaca', background: 'white', color: '#dc2626',
+                      fontSize: '14px', fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer',
+                      opacity: saving ? 0.5 : 1,
+                    }}
+                  >
+                    <XCircle size={16} />
+                    {saving ? '...' : 'Respinge'}
+                  </button>
+                  <button
+                    onClick={() => setStep('tip_aprobare')}
+                    disabled={saving}
+                    style={{
+                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      gap: '8px', padding: '10px', borderRadius: '12px',
+                      border: 'none', background: '#16a34a', color: 'white',
+                      fontSize: '14px', fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer',
+                      opacity: saving ? 0.5 : 1,
+                    }}
+                  >
+                    <CheckCircle size={16} />
+                    Aproba
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Step 2: Tip aprobare */}
+                <div style={{ marginBottom: '16px' }}>
+                  <p style={{ fontSize: '13px', fontWeight: 500, color: '#475569', marginBottom: '12px' }}>
+                    Ce se intampla cu timpul de recuperat?
+                  </p>
 
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button
-                onClick={() => handleDecizie(approveModal, 'respins')}
-                disabled={saving}
-                style={{
-                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  gap: '8px', padding: '10px', borderRadius: '12px',
-                  border: '1px solid #fecaca', background: 'white', color: '#dc2626',
-                  fontSize: '14px', fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer',
-                  opacity: saving ? 0.5 : 1,
-                }}
-              >
-                <XCircle size={16} />
-                {saving ? '...' : 'Respinge'}
-              </button>
-              <button
-                onClick={() => handleDecizie(approveModal, 'aprobat')}
-                disabled={saving}
-                style={{
-                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  gap: '8px', padding: '10px', borderRadius: '12px',
-                  border: 'none', background: '#16a34a', color: 'white',
-                  fontSize: '14px', fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer',
-                  opacity: saving ? 0.5 : 1,
-                }}
-              >
-                <CheckCircle size={16} />
-                {saving ? '...' : 'Aproba'}
-              </button>
-            </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {/* Optiunea 1 - fara recuperare */}
+                    <button
+                      onClick={() => setTipAprobare('fara_recuperare')}
+                      style={{
+                        padding: '14px', borderRadius: '12px', textAlign: 'left',
+                        border: tipAprobare === 'fara_recuperare' ? '2px solid #3b82f6' : '1px solid #e2e8f0',
+                        background: tipAprobare === 'fara_recuperare' ? '#eff6ff' : 'white',
+                        cursor: 'pointer', transition: 'all 0.15s',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{
+                          width: '20px', height: '20px', borderRadius: '50%',
+                          border: tipAprobare === 'fara_recuperare' ? '6px solid #3b82f6' : '2px solid #cbd5e1',
+                          flexShrink: 0, transition: 'all 0.15s',
+                        }} />
+                        <div>
+                          <p style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a', margin: '0 0 2px' }}>
+                            Ziua devine {formatNorma(normaZi)}
+                          </p>
+                          <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>
+                            Orele zilei se considera {formatNorma(normaZi)} — nimic de recuperat
+                          </p>
+                        </div>
+                      </div>
+                    </button>
 
-            <button
-              onClick={() => setApproveModal(null)}
-              style={{
-                width: '100%', marginTop: '12px', padding: '6px',
-                border: 'none', background: 'none', cursor: 'pointer',
-                fontSize: '12px', color: '#94a3b8',
-              }}
-            >
-              Anuleaza
-            </button>
+                    {/* Optiunea 2 - cu recuperare */}
+                    <button
+                      onClick={() => setTipAprobare('cu_recuperare')}
+                      style={{
+                        padding: '14px', borderRadius: '12px', textAlign: 'left',
+                        border: tipAprobare === 'cu_recuperare' ? '2px solid #f59e0b' : '1px solid #e2e8f0',
+                        background: tipAprobare === 'cu_recuperare' ? '#fffbeb' : 'white',
+                        cursor: 'pointer', transition: 'all 0.15s',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{
+                          width: '20px', height: '20px', borderRadius: '50%',
+                          border: tipAprobare === 'cu_recuperare' ? '6px solid #f59e0b' : '2px solid #cbd5e1',
+                          flexShrink: 0, transition: 'all 0.15s',
+                        }} />
+                        <div>
+                          <p style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a', margin: '0 0 2px' }}>
+                            Se recupereaza intr-o alta zi
+                          </p>
+                          <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>
+                            Orele raman cum sunt — angajatul recupereaza diferenta ulterior
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button
+                    onClick={() => setStep('decizie')}
+                    style={{
+                      flex: 1, padding: '10px', borderRadius: '12px',
+                      border: '1px solid #e2e8f0', background: 'white', color: '#64748b',
+                      fontSize: '14px', fontWeight: 500, cursor: 'pointer',
+                    }}
+                  >
+                    Inapoi
+                  </button>
+                  <button
+                    onClick={() => handleAproba(approveModal)}
+                    disabled={saving}
+                    style={{
+                      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      gap: '8px', padding: '10px', borderRadius: '12px',
+                      border: 'none', background: '#16a34a', color: 'white',
+                      fontSize: '14px', fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer',
+                      opacity: saving ? 0.5 : 1,
+                    }}
+                  >
+                    <CheckCircle size={16} />
+                    {saving ? 'Se salveaza...' : 'Confirma aprobarea'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -394,7 +470,6 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
 
   return (
     <>
-      {/* Buton notificari in sidebar */}
       <button
         onClick={handleOpen}
         className={cn(
@@ -410,8 +485,6 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
           </span>
         )}
       </button>
-
-      {/* Portal — randat direct in body, peste orice */}
       {portal}
     </>
   )
