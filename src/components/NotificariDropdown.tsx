@@ -45,19 +45,6 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
     return () => clearInterval(interval)
   }, [userId])
 
-  // Inchide la click in afara
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as Node
-      const dropdown = document.getElementById('notificari-dropdown')
-      if (dropdown && !dropdown.contains(target) && buttonRef.current && !buttonRef.current.contains(target)) {
-        setOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [])
-
   const loadNotificari = async () => {
     if (!userId) return
     const { data } = await supabase
@@ -133,7 +120,7 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
 
   return (
     <>
-      {/* Buton */}
+      {/* Buton notificari */}
       <button
         ref={buttonRef}
         onClick={handleOpen}
@@ -151,76 +138,98 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
         )}
       </button>
 
-      {/* Dropdown — fixed, langa sidebar */}
+      {/* Panel notificari */}
       {open && (
-        <div
-          id="notificari-dropdown"
-          className="fixed top-0 left-64 h-screen w-80 bg-white shadow-2xl border-r border-slate-100 z-40 flex flex-col"
-        >
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between shrink-0">
-            <div>
-              <h3 className="font-semibold text-slate-900 text-sm">Notificari</h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                {count === 0 ? 'Nicio notificare noua' : `${count} motivatii de rezolvat`}
-              </p>
-            </div>
-            <button onClick={() => setOpen(false)}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
-              <X size={15} />
-            </button>
-          </div>
+        <>
+          {/* Overlay */}
+          <div
+            className="fixed inset-0 z-30 bg-black/20 backdrop-blur-[1px]"
+            onClick={() => setOpen(false)}
+          />
 
-          <div className="flex-1 overflow-y-auto">
-            {notificari.length === 0 ? (
-              <div className="p-6 text-center mt-8">
-                <Bell size={32} className="text-slate-200 mx-auto mb-3" />
-                <p className="text-sm text-slate-400">Nicio motivatie in asteptare</p>
+          {/* Panel */}
+          <div
+            id="notificari-dropdown"
+            className="fixed top-0 left-64 h-screen w-80 bg-white shadow-2xl border-r border-slate-100 z-40 flex flex-col"
+          >
+            {/* Header */}
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white">
+              <div>
+                <h3 className="font-semibold text-slate-900 text-sm">Notificari</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {count === 0 ? 'Nicio notificare noua' : `${count} motivatii de rezolvat`}
+                </p>
               </div>
-            ) : (
-              <div className="divide-y divide-slate-50">
-                {notificari.map(n => (
-                  <div key={n.id} className={cn(
-                    'p-4 transition-all hover:bg-slate-50',
-                    !n.citita && 'bg-blue-50/50 border-l-2 border-blue-400'
-                  )}>
-                    <div className="flex items-start gap-3">
-                      <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 text-sm font-semibold shrink-0">
-                        {n.angajat_name?.charAt(0)?.toUpperCase() || '?'}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-0.5">
-                          <p className="text-xs font-semibold text-slate-900">{n.angajat_name}</p>
-                          {!n.citita && (
-                            <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
-                          )}
+              <button
+                onClick={() => setOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* Lista */}
+            <div className="flex-1 overflow-y-auto">
+              {notificari.length === 0 ? (
+                <div className="p-8 text-center mt-4">
+                  <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
+                    <Bell size={24} className="text-slate-300" />
+                  </div>
+                  <p className="text-sm font-medium text-slate-500">Nicio motivatie in asteptare</p>
+                  <p className="text-xs text-slate-400 mt-1">Vei fi notificat cand apar motivatii noi</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-50">
+                  {notificari.map(n => (
+                    <div
+                      key={n.id}
+                      className={cn(
+                        'p-4 transition-all hover:bg-slate-50',
+                        !n.citita && 'bg-blue-50/40 border-l-2 border-l-blue-400'
+                      )}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 text-sm font-semibold shrink-0 mt-0.5">
+                          {n.angajat_name?.charAt(0)?.toUpperCase() || '?'}
                         </div>
-                        <p className="text-xs text-slate-400 mb-2">
-                          {n.date_referinta && format(parseISO(n.date_referinta), 'dd MMM yyyy', { locale: ro })}
-                        </p>
-                        <div className="bg-slate-50 rounded-lg px-3 py-2 mb-3 border border-slate-100">
-                          <p className="text-xs text-slate-700">"{n.mesaj}"</p>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-0.5">
+                            <p className="text-xs font-semibold text-slate-900">{n.angajat_name}</p>
+                            {!n.citita && (
+                              <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-400 mb-2">
+                            {n.date_referinta && format(parseISO(n.date_referinta), 'dd MMM yyyy', { locale: ro })}
+                          </p>
+                          <div className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 mb-3">
+                            <p className="text-xs text-slate-700 italic">"{n.mesaj}"</p>
+                          </div>
+                          <button
+                            onClick={() => { setApproveModal(n); setRaspuns('') }}
+                            className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs font-medium hover:bg-amber-100 transition-all"
+                          >
+                            <MessageSquare size={12} />
+                            Aproba / Respinge
+                          </button>
                         </div>
-                        <button
-                          onClick={() => { setApproveModal(n); setRaspuns('') }}
-                          className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs font-medium hover:bg-amber-100 transition-all"
-                        >
-                          <MessageSquare size={12} />
-                          Aproba / Respinge
-                        </button>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Modal decizie */}
       {approveModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setApproveModal(null)} />
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setApproveModal(null)}
+          />
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 z-10">
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -229,8 +238,10 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
                   {approveModal.angajat_name} · {approveModal.date_referinta && format(parseISO(approveModal.date_referinta), 'dd MMM yyyy', { locale: ro })}
                 </p>
               </div>
-              <button onClick={() => setApproveModal(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+              <button
+                onClick={() => setApproveModal(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
                 <X size={18} />
               </button>
             </div>
@@ -238,7 +249,7 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
             <div className="mb-4">
               <p className="text-xs font-medium text-slate-500 mb-1.5">Motivatia angajatului</p>
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
-                <p className="text-sm text-slate-700">"{approveModal.mesaj}"</p>
+                <p className="text-sm text-slate-700 italic">"{approveModal.mesaj}"</p>
               </div>
             </div>
 
@@ -278,8 +289,10 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
               </button>
             </div>
 
-            <button onClick={() => setApproveModal(null)}
-              className="w-full mt-3 text-xs text-slate-400 hover:text-slate-600 py-1.5">
+            <button
+              onClick={() => setApproveModal(null)}
+              className="w-full mt-3 text-xs text-slate-400 hover:text-slate-600 py-1.5"
+            >
               Anuleaza
             </button>
           </div>
