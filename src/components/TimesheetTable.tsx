@@ -144,6 +144,47 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
     setModal({ open: false, date: '', pontaj: null, motivatie: '', type: 'edit', raspuns: '' })
   }
 
+  const trimiteNotificare = async (
+    date: string,
+    motivatieText: string,
+    timesheetId?: string,
+    observatieId?: string
+  ) => {
+    if (!user?.id) return
+
+    // Gaseste managerul angajatului
+    const { data: angajat } = await supabase
+      .from('app_users')
+      .select('manager_id, name')
+      .eq('id', user.id)
+      .single()
+
+    if (!angajat?.manager_id) return
+
+    // Sterge notificarea veche pentru aceeasi zi daca exista
+    await supabase
+      .from('notificari')
+      .delete()
+      .eq('destinatar_id', angajat.manager_id)
+      .eq('angajat_id', user.id)
+      .eq('date_referinta', date)
+
+    // Creeaza notificare noua
+    await supabase.from('notificari').insert({
+      destinatar_id: angajat.manager_id,
+      tip: 'motivatie_noua',
+      titlu: `Motivatie noua de la ${angajat.name}`,
+      mesaj: motivatieText,
+      angajat_id: user.id,
+      angajat_name: angajat.name,
+      timesheet_id: timesheetId || null,
+      observatie_id: observatieId || null,
+      date_referinta: date,
+      citita: false,
+      rezolvata: false,
+    })
+  }
+
   const handleSaveMotivatie = async () => {
     if (!modal.date) return
     setSaving(true)
@@ -167,11 +208,16 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
           ? { ...r, motivatie: modal.motivatie.trim() || null, motivatie_status: modal.motivatie.trim() ? 'in_asteptare' : null, motivatie_aprobata_de: null, motivatie_aprobata_la: null, motivatie_raspuns: null }
           : r
       ))
+
+      // Trimite notificare manager
+      if (modal.motivatie.trim()) {
+        await trimiteNotificare(modal.date, modal.motivatie.trim(), modal.pontaj.id, undefined)
+      }
     } else {
       if (!empId) { toast.error('ID angajat lipsa'); setSaving(false); return }
 
       if (modal.motivatie.trim()) {
-        const { error } = await supabase
+        const { data: obsData, error } = await supabase
           .from('observatii_zile')
           .upsert({
             employee_id: empId,
@@ -182,12 +228,18 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
             motivatie_aprobata_la: null,
             motivatie_raspuns: null
           }, { onConflict: 'employee_id,date' })
+          .select()
+          .single()
 
         if (error) { toast.error('Eroare: ' + error.message); setSaving(false); return }
+
         setObservatiiZile(prev => ({
           ...prev,
           [modal.date]: { ...prev[modal.date], observatie: modal.motivatie.trim(), motivatie_status: 'in_asteptare', motivatie_raspuns: null }
         }))
+
+        // Trimite notificare manager
+        await trimiteNotificare(modal.date, modal.motivatie.trim(), undefined, obsData?.id)
       } else {
         await supabase.from('observatii_zile').delete().eq('employee_id', empId).eq('date', modal.date)
         setObservatiiZile(prev => { const next = { ...prev }; delete next[modal.date]; return next })
@@ -233,6 +285,14 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
         setObservatiiZile(prev => ({ ...prev, [modal.date]: { ...prev[modal.date], ...updateData } }))
       }
     }
+
+    // Marcheaza notificarea ca rezolvata
+    await supabase
+      .from('notificari')
+      .update({ rezolvata: true, citita: true })
+      .eq('angajat_id', modal.pontaj?.employee_id ? undefined : empId)
+      .eq('date_referinta', modal.date)
+      .eq('rezolvata', false)
 
     toast.success(decizie === 'aprobat' ? 'Motivatie aprobata' : 'Motivatie respinsa')
     closeModal()
@@ -421,8 +481,6 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
               const hasMot = !!motivatieText
               const canApproveThis = isManager && hasMot && motivatieStatus === 'in_asteptare'
               const canViewDecizie = hasMot && (motivatieStatus === 'aprobat' || motivatieStatus === 'respins')
-
-              // Ore efective — daca motivatia e aprobata, afisam norma
               const oreEfective = pontaj && motivatieStatus === 'aprobat'
                 ? NORMA
                 : pontaj ? Number(pontaj.hours_worked) : 0
@@ -459,31 +517,25 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-1">
                         {!isManager && !readonly && (
-                          <button
-                            onClick={() => openEditModal(date, null)}
+                          <button onClick={() => openEditModal(date, null)}
                             className={cn('p-1.5 rounded-lg transition-all',
                               hasMot ? 'text-blue-500 hover:text-blue-700 hover:bg-blue-50'
                                 : 'text-slate-300 hover:text-slate-500 hover:bg-slate-100')}
-                            title="Adauga motivatie"
-                          >
+                            title="Adauga motivatie">
                             <MessageSquare size={15} />
                           </button>
                         )}
                         {canApproveThis && (
-                          <button
-                            onClick={() => openApproveModal(date, null)}
+                          <button onClick={() => openApproveModal(date, null)}
                             className="p-1.5 rounded-lg text-amber-500 hover:text-amber-700 hover:bg-amber-50 transition-all"
-                            title="Aproba / Respinge"
-                          >
+                            title="Aproba / Respinge">
                             <CheckCircle size={15} />
                           </button>
                         )}
                         {isManager && canViewDecizie && (
-                          <button
-                            onClick={() => openApproveModal(date, null)}
+                          <button onClick={() => openApproveModal(date, null)}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
-                            title="Vezi decizia"
-                          >
+                            title="Vezi decizia">
                             <MessageSquare size={15} />
                           </button>
                         )}
@@ -535,31 +587,25 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
                       {!isManager && (
-                        <button
-                          onClick={() => openEditModal(date, pontaj)}
+                        <button onClick={() => openEditModal(date, pontaj)}
                           className={cn('p-1.5 rounded-lg transition-all',
                             hasMot ? 'text-blue-500 hover:text-blue-700 hover:bg-blue-50'
                               : 'text-slate-300 hover:text-slate-500 hover:bg-slate-100')}
-                          title={readonly ? 'Vezi motivatie' : 'Adauga / editeaza motivatie'}
-                        >
+                          title={readonly ? 'Vezi motivatie' : 'Adauga / editeaza motivatie'}>
                           <MessageSquare size={15} />
                         </button>
                       )}
                       {canApproveThis && (
-                        <button
-                          onClick={() => openApproveModal(date, pontaj)}
+                        <button onClick={() => openApproveModal(date, pontaj)}
                           className="p-1.5 rounded-lg text-amber-500 hover:text-amber-700 hover:bg-amber-50 transition-all"
-                          title="Aproba / Respinge"
-                        >
+                          title="Aproba / Respinge">
                           <CheckCircle size={15} />
                         </button>
                       )}
                       {isManager && canViewDecizie && (
-                        <button
-                          onClick={() => openApproveModal(date, pontaj)}
+                        <button onClick={() => openApproveModal(date, pontaj)}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
-                          title="Vezi decizia"
-                        >
+                          title="Vezi decizia">
                           <MessageSquare size={15} />
                         </button>
                       )}
