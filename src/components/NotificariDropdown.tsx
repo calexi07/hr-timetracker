@@ -33,25 +33,24 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
   const [approveModal, setApproveModal] = useState<Notificare | null>(null)
   const [raspuns, setRaspuns] = useState('')
   const [saving, setSaving] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
 
   const nerezolvate = notificari.filter(n => !n.rezolvata)
   const count = nerezolvate.length
 
   useEffect(() => {
-    if (!userId) {
-      console.log('NotificariDropdown: userId e null/undefined')
-      return
-    }
-    console.log('NotificariDropdown: loading pentru userId:', userId)
+    if (!userId) return
     loadNotificari()
     const interval = setInterval(loadNotificari, 30000)
     return () => clearInterval(interval)
   }, [userId])
 
+  // Inchide la click in afara
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      const target = e.target as Node
+      const dropdown = document.getElementById('notificari-dropdown')
+      if (dropdown && !dropdown.contains(target) && buttonRef.current && !buttonRef.current.contains(target)) {
         setOpen(false)
       }
     }
@@ -61,22 +60,17 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
 
   const loadNotificari = async () => {
     if (!userId) return
-
-    console.log('loadNotificari pentru:', userId)
-
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('notificari')
       .select('*')
       .eq('destinatar_id', userId)
       .eq('rezolvata', false)
       .order('created_at', { ascending: false })
-
-    console.log('notificari rezultat:', { data, error, count: data?.length })
     setNotificari(data || [])
   }
 
   const handleOpen = async () => {
-    setOpen(!open)
+    setOpen(prev => !prev)
     if (!open && count > 0) {
       await supabase
         .from('notificari')
@@ -138,8 +132,10 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
   }
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <>
+      {/* Buton */}
       <button
+        ref={buttonRef}
         onClick={handleOpen}
         className={cn(
           'relative flex items-center gap-2 px-3 py-2 rounded-xl transition-all w-full text-left',
@@ -155,11 +151,13 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
         )}
       </button>
 
-    {open && (
-  <div className="fixed left-64 top-auto w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 overflow-hidden"
-    style={{ top: dropdownRef.current?.getBoundingClientRect().top || 0 }}
-  >
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+      {/* Dropdown — fixed, langa sidebar */}
+      {open && (
+        <div
+          id="notificari-dropdown"
+          className="fixed top-0 left-64 h-screen w-80 bg-white shadow-2xl border-r border-slate-100 z-40 flex flex-col"
+        >
+          <div className="p-4 border-b border-slate-100 flex items-center justify-between shrink-0">
             <div>
               <h3 className="font-semibold text-slate-900 text-sm">Notificari</h3>
               <p className="text-xs text-slate-400 mt-0.5">
@@ -172,10 +170,10 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
             </button>
           </div>
 
-          <div className="max-h-96 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto">
             {notificari.length === 0 ? (
-              <div className="p-6 text-center">
-                <Bell size={24} className="text-slate-300 mx-auto mb-2" />
+              <div className="p-6 text-center mt-8">
+                <Bell size={32} className="text-slate-200 mx-auto mb-3" />
                 <p className="text-sm text-slate-400">Nicio motivatie in asteptare</p>
               </div>
             ) : (
@@ -183,31 +181,31 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
                 {notificari.map(n => (
                   <div key={n.id} className={cn(
                     'p-4 transition-all hover:bg-slate-50',
-                    !n.citita && 'bg-blue-50/50'
+                    !n.citita && 'bg-blue-50/50 border-l-2 border-blue-400'
                   )}>
                     <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 text-xs font-semibold shrink-0">
+                      <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 text-sm font-semibold shrink-0">
                         {n.angajat_name?.charAt(0)?.toUpperCase() || '?'}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <p className="text-xs font-semibold text-slate-900 truncate">{n.angajat_name}</p>
+                        <div className="flex items-center justify-between mb-0.5">
+                          <p className="text-xs font-semibold text-slate-900">{n.angajat_name}</p>
                           {!n.citita && (
                             <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
                           )}
                         </div>
-                        <p className="text-xs text-slate-500 mb-1">
+                        <p className="text-xs text-slate-400 mb-2">
                           {n.date_referinta && format(parseISO(n.date_referinta), 'dd MMM yyyy', { locale: ro })}
                         </p>
-                        <p className="text-xs text-slate-700 bg-slate-100 rounded-lg px-2 py-1.5 mb-3">
-                          "{n.mesaj}"
-                        </p>
+                        <div className="bg-slate-50 rounded-lg px-3 py-2 mb-3 border border-slate-100">
+                          <p className="text-xs text-slate-700">"{n.mesaj}"</p>
+                        </div>
                         <button
                           onClick={() => { setApproveModal(n); setRaspuns('') }}
-                          className="w-full flex items-center justify-center gap-1 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs font-medium hover:bg-amber-100 transition-all"
+                          className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs font-medium hover:bg-amber-100 transition-all"
                         >
                           <MessageSquare size={12} />
-                          Decide
+                          Aproba / Respinge
                         </button>
                       </div>
                     </div>
@@ -219,6 +217,7 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
         </div>
       )}
 
+      {/* Modal decizie */}
       {approveModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setApproveModal(null)} />
@@ -286,6 +285,6 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
           </div>
         </div>
       )}
-    </div>
+    </>
   )
 }
