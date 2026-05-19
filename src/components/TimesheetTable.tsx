@@ -8,7 +8,8 @@ import { eachDayOfInterval, parseISO, format, isWeekend } from 'date-fns'
 import { ro } from 'date-fns/locale'
 import { useUser } from '@/components/UserContext'
 
-function getStatus(hours: number, norma: number): { label: string; color: string } {
+function getStatus(hours: number, norma: number, motivatieStatus?: string): { label: string; color: string } {
+  if (motivatieStatus === 'aprobat') return { label: 'Echilibrat', color: 'bg-green-100 text-green-700' }
   if (hours === 0) return { label: 'Fara date', color: 'bg-slate-100 text-slate-500' }
   const diff = hours - norma
   const minute = Math.round(diff * 60)
@@ -264,9 +265,9 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
         return {
           'Data': date, 'Zi': ziSaptamana,
           'Intrare': pontaj?.check_in || '—', 'Iesire': pontaj?.check_out || '—',
-          'Ore lucrate': pontaj?.hours_worked || 0,
+          'Ore lucrate': motivatieStatus === 'aprobat' ? NORMA : (pontaj?.hours_worked || 0),
           'Diferenta': pontaj ? (diff >= 0 ? `+${diff}m` : `${diff}m`) : '—',
-          'Status': pontaj ? getStatus(Number(pontaj.hours_worked), NORMA).label : 'Fara date',
+          'Status': pontaj ? getStatus(Number(pontaj.hours_worked), NORMA, motivatieStatus).label : 'Fara date',
           'Motivatie': motivatieText || '',
           'Status motivatie': motivatieStatus || '',
           'Raspuns manager': raspuns || '',
@@ -298,13 +299,12 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
               <div className="bg-slate-50 rounded-xl p-3 mb-4 text-xs text-slate-500 flex gap-4">
                 <span>Intrare: <strong className="text-slate-700">{formatTime(modal.pontaj.check_in)}</strong></span>
                 <span>Iesire: <strong className="text-slate-700">{formatTime(modal.pontaj.check_out)}</strong></span>
-                <span>Ore: <strong className="text-slate-700">{formatHours(Number(modal.pontaj.hours_worked))}</strong></span>
+                <span>Ore reale: <strong className="text-slate-700">{formatHours(Number(modal.pontaj.hours_worked))}</strong></span>
               </div>
             )}
 
             {modal.type === 'approve' ? (
               <>
-                {/* Motivatia angajatului - readonly */}
                 <div className="mb-4">
                   <p className="text-xs font-medium text-slate-500 mb-1.5">Motivatia angajatului</p>
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
@@ -313,10 +313,9 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                 </div>
 
                 <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 mb-4 text-xs text-amber-700">
-                  Daca aprobi motivatia, diferenta din acea zi va fi considerata <strong>0</strong>.
+                  Daca aprobi motivatia, orele zilei vor fi considerate <strong>{formatHours(NORMA)}</strong> (norma) si diferenta va fi <strong>±0m</strong>.
                 </div>
 
-                {/* Raspuns manager */}
                 <div className="mb-5">
                   <label className="block text-xs font-medium text-slate-500 mb-1.5">
                     Raspunsul tau <span className="text-slate-400 font-normal">(optional)</span>
@@ -324,7 +323,7 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                   <textarea
                     value={modal.raspuns}
                     onChange={e => setModal(prev => ({ ...prev, raspuns: e.target.value }))}
-                    placeholder="Ex: Aprobat, conform politicii companiei. / Respins, necesita documentatie suplimentara."
+                    placeholder="Ex: Aprobat, conform politicii companiei."
                     rows={3}
                     className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
                   />
@@ -423,6 +422,11 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
               const canApproveThis = isManager && hasMot && motivatieStatus === 'in_asteptare'
               const canViewDecizie = hasMot && (motivatieStatus === 'aprobat' || motivatieStatus === 'respins')
 
+              // Ore efective — daca motivatia e aprobata, afisam norma
+              const oreEfective = pontaj && motivatieStatus === 'aprobat'
+                ? NORMA
+                : pontaj ? Number(pontaj.hours_worked) : 0
+
               if (!pontaj) {
                 return (
                   <tr key={date} className="border-b border-slate-50 bg-slate-50/50 hover:bg-slate-50 transition-colors">
@@ -489,7 +493,7 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                 )
               }
 
-              const { label, color } = getStatus(Number(pontaj.hours_worked), NORMA)
+              const { label, color } = getStatus(Number(pontaj.hours_worked), NORMA, motivatieStatus)
               const { text: diffText, color: diffColor } = formatDiff(Number(pontaj.hours_worked), NORMA, motivatieStatus)
 
               return (
@@ -501,12 +505,15 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                   <td className="px-4 py-3 text-slate-400 capitalize text-xs">{ziSaptamana}</td>
                   <td className="px-4 py-3 text-slate-600">{formatTime(pontaj.check_in)}</td>
                   <td className="px-4 py-3 text-slate-600">{formatTime(pontaj.check_out)}</td>
-                  <td className="px-4 py-3 text-right font-semibold text-slate-900">{formatHours(Number(pontaj.hours_worked))}</td>
+                  <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                    {formatHours(oreEfective)}
+                    {motivatieStatus === 'aprobat' && (
+                      <span className="text-xs text-slate-400 font-normal ml-1">(norma)</span>
+                    )}
+                  </td>
                   <td className={cn('px-4 py-3 text-right', diffColor)}>{diffText}</td>
                   <td className="px-4 py-3">
-                    <span className={cn('badge', motivatieStatus === 'aprobat' ? 'bg-green-100 text-green-700' : color)}>
-                      {motivatieStatus === 'aprobat' ? 'Echilibrat' : label}
-                    </span>
+                    <span className={cn('badge', color)}>{label}</span>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-col gap-1">
