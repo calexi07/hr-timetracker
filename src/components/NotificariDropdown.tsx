@@ -155,8 +155,10 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
         )}
       </button>
 
-      {open && (
-        <div className="absolute left-full top-0 ml-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 overflow-hidden">
+    {open && (
+  <div className="fixed left-64 top-auto w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 overflow-hidden"
+    style={{ top: dropdownRef.current?.getBoundingClientRect().top || 0 }}
+  >
           <div className="p-4 border-b border-slate-100 flex items-center justify-between">
             <div>
               <h3 className="font-semibold text-slate-900 text-sm">Notificari</h3>
