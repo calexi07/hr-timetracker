@@ -1,5 +1,6 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { createClient } from '@/lib/supabase/client'
 import { Bell, CheckCircle, XCircle, X, MessageSquare } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -33,10 +34,15 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
   const [approveModal, setApproveModal] = useState<Notificare | null>(null)
   const [raspuns, setRaspuns] = useState('')
   const [saving, setSaving] = useState(false)
-  const buttonRef = useRef<HTMLButtonElement>(null)
+  const [mounted, setMounted] = useState(false)
 
   const nerezolvate = notificari.filter(n => !n.rezolvata)
   const count = nerezolvate.length
+
+  useEffect(() => {
+    setMounted(true)
+    return () => setMounted(false)
+  }, [])
 
   useEffect(() => {
     if (!userId) return
@@ -44,6 +50,15 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
     const interval = setInterval(loadNotificari, 30000)
     return () => clearInterval(interval)
   }, [userId])
+
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [open])
 
   const loadNotificari = async () => {
     if (!userId) return
@@ -118,11 +133,269 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
     return `${h}h ${m}m`
   }
 
+  const portal = mounted && open ? createPortal(
+    <>
+      {/* Overlay complet peste tot */}
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 99998,
+          background: 'rgba(0,0,0,0.4)',
+        }}
+        onClick={() => setOpen(false)}
+      />
+
+      {/* Panel notificari — montat direct in body */}
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: '256px', // latimea sidebar-ului (w-64 = 256px)
+          height: '100vh',
+          width: '320px',
+          background: 'white',
+          zIndex: 99999,
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: '4px 0 24px rgba(0,0,0,0.15)',
+        }}
+      >
+        {/* Header */}
+        <div style={{
+          padding: '16px',
+          borderBottom: '1px solid #f1f5f9',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexShrink: 0,
+          background: 'white',
+        }}>
+          <div>
+            <p style={{ fontWeight: 600, color: '#0f172a', fontSize: '14px', margin: 0 }}>Notificari</p>
+            <p style={{ fontSize: '12px', color: '#94a3b8', margin: '2px 0 0 0' }}>
+              {count === 0 ? 'Nicio notificare noua' : `${count} motivatii de rezolvat`}
+            </p>
+          </div>
+          <button
+            onClick={() => setOpen(false)}
+            style={{
+              padding: '6px',
+              borderRadius: '8px',
+              border: 'none',
+              background: 'none',
+              cursor: 'pointer',
+              color: '#94a3b8',
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
+            <X size={15} />
+          </button>
+        </div>
+
+        {/* Lista */}
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {notificari.length === 0 ? (
+            <div style={{ padding: '32px', textAlign: 'center', marginTop: '16px' }}>
+              <div style={{
+                width: '56px', height: '56px', borderRadius: '50%',
+                background: '#f1f5f9', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', margin: '0 auto 12px'
+              }}>
+                <Bell size={24} color="#cbd5e1" />
+              </div>
+              <p style={{ fontSize: '14px', color: '#64748b', fontWeight: 500, margin: '0 0 4px' }}>
+                Nicio motivatie in asteptare
+              </p>
+              <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>
+                Vei fi notificat cand apar motivatii noi
+              </p>
+            </div>
+          ) : (
+            notificari.map((n, i) => (
+              <div
+                key={n.id}
+                style={{
+                  padding: '16px',
+                  borderBottom: i < notificari.length - 1 ? '1px solid #f8fafc' : 'none',
+                  background: !n.citita ? '#eff6ff' : 'white',
+                  borderLeft: !n.citita ? '3px solid #3b82f6' : '3px solid transparent',
+                }}
+              >
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  <div style={{
+                    width: '36px', height: '36px', borderRadius: '50%',
+                    background: '#fef3c7', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', color: '#d97706',
+                    fontWeight: 600, fontSize: '14px', flexShrink: 0,
+                  }}>
+                    {n.angajat_name?.charAt(0)?.toUpperCase() || '?'}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
+                      <p style={{ fontSize: '12px', fontWeight: 600, color: '#0f172a', margin: 0 }}>
+                        {n.angajat_name}
+                      </p>
+                      {!n.citita && (
+                        <span style={{
+                          width: '8px', height: '8px', borderRadius: '50%',
+                          background: '#3b82f6', flexShrink: 0,
+                        }} />
+                      )}
+                    </div>
+                    <p style={{ fontSize: '11px', color: '#94a3b8', margin: '0 0 8px' }}>
+                      {n.date_referinta && format(parseISO(n.date_referinta), 'dd MMM yyyy', { locale: ro })}
+                    </p>
+                    <div style={{
+                      background: '#f8fafc', border: '1px solid #e2e8f0',
+                      borderRadius: '8px', padding: '8px 12px', marginBottom: '10px',
+                    }}>
+                      <p style={{ fontSize: '12px', color: '#475569', fontStyle: 'italic', margin: 0 }}>
+                        "{n.mesaj}"
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => { setApproveModal(n); setRaspuns('') }}
+                      style={{
+                        width: '100%', padding: '8px', borderRadius: '8px',
+                        border: '1px solid #fcd34d', background: '#fffbeb',
+                        color: '#b45309', fontSize: '12px', fontWeight: 500,
+                        cursor: 'pointer', display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', gap: '6px',
+                      }}
+                    >
+                      <MessageSquare size={12} />
+                      Aproba / Respinge
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Modal decizie */}
+      {approveModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 100000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
+        }}>
+          <div
+            style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }}
+            onClick={() => setApproveModal(null)}
+          />
+          <div style={{
+            position: 'relative', background: 'white', borderRadius: '16px',
+            boxShadow: '0 25px 50px rgba(0,0,0,0.25)', width: '100%', maxWidth: '448px', padding: '24px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div>
+                <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#0f172a', margin: '0 0 4px' }}>
+                  Aprobare motivatie
+                </h3>
+                <p style={{ fontSize: '14px', color: '#94a3b8', margin: 0 }}>
+                  {approveModal.angajat_name} · {approveModal.date_referinta && format(parseISO(approveModal.date_referinta), 'dd MMM yyyy', { locale: ro })}
+                </p>
+              </div>
+              <button
+                onClick={() => setApproveModal(null)}
+                style={{ padding: '6px', borderRadius: '8px', border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <p style={{ fontSize: '12px', fontWeight: 500, color: '#64748b', marginBottom: '6px' }}>
+                Motivatia angajatului
+              </p>
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px' }}>
+                <p style={{ fontSize: '14px', color: '#475569', fontStyle: 'italic', margin: 0 }}>
+                  "{approveModal.mesaj}"
+                </p>
+              </div>
+            </div>
+
+            <div style={{
+              background: '#fffbeb', border: '1px solid #fde68a',
+              borderRadius: '12px', padding: '12px', marginBottom: '16px',
+              fontSize: '12px', color: '#b45309',
+            }}>
+              Daca aprobi, orele zilei vor fi considerate <strong>{formatNorma(normaZi)}</strong> si diferenta va fi <strong>±0m</strong>.
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, color: '#64748b', marginBottom: '6px' }}>
+                Raspunsul tau <span style={{ color: '#94a3b8', fontWeight: 400 }}>(optional)</span>
+              </label>
+              <textarea
+                value={raspuns}
+                onChange={e => setRaspuns(e.target.value)}
+                placeholder="Ex: Aprobat, conform politicii companiei."
+                rows={3}
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: '12px',
+                  border: '1px solid #e2e8f0', fontSize: '14px', color: '#0f172a',
+                  resize: 'none', outline: 'none', boxSizing: 'border-box',
+                  fontFamily: 'inherit',
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => handleDecizie(approveModal, 'respins')}
+                disabled={saving}
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  gap: '8px', padding: '10px', borderRadius: '12px',
+                  border: '1px solid #fecaca', background: 'white', color: '#dc2626',
+                  fontSize: '14px', fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer',
+                  opacity: saving ? 0.5 : 1,
+                }}
+              >
+                <XCircle size={16} />
+                {saving ? '...' : 'Respinge'}
+              </button>
+              <button
+                onClick={() => handleDecizie(approveModal, 'aprobat')}
+                disabled={saving}
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  gap: '8px', padding: '10px', borderRadius: '12px',
+                  border: 'none', background: '#16a34a', color: 'white',
+                  fontSize: '14px', fontWeight: 500, cursor: saving ? 'not-allowed' : 'pointer',
+                  opacity: saving ? 0.5 : 1,
+                }}
+              >
+                <CheckCircle size={16} />
+                {saving ? '...' : 'Aproba'}
+              </button>
+            </div>
+
+            <button
+              onClick={() => setApproveModal(null)}
+              style={{
+                width: '100%', marginTop: '12px', padding: '6px',
+                border: 'none', background: 'none', cursor: 'pointer',
+                fontSize: '12px', color: '#94a3b8',
+              }}
+            >
+              Anuleaza
+            </button>
+          </div>
+        </div>
+      )}
+    </>,
+    document.body
+  ) : null
+
   return (
     <>
-      {/* Buton notificari */}
+      {/* Buton notificari in sidebar */}
       <button
-        ref={buttonRef}
         onClick={handleOpen}
         className={cn(
           'relative flex items-center gap-2 px-3 py-2 rounded-xl transition-all w-full text-left',
@@ -138,167 +411,8 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
         )}
       </button>
 
-      {/* Panel + Overlay */}
-      {open && (
-        <>
-          {/* Overlay peste tot inclusiv grafice */}
-          <div
-            className="fixed inset-0 bg-black/30"
-            style={{ zIndex: 9998 }}
-            onClick={() => setOpen(false)}
-          />
-
-          {/* Panel notificari */}
-          <div
-            className="fixed top-0 left-64 h-screen w-80 bg-white shadow-2xl flex flex-col"
-            style={{ zIndex: 9999 }}
-          >
-            {/* Header */}
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white">
-              <div>
-                <h3 className="font-semibold text-slate-900 text-sm">Notificari</h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {count === 0 ? 'Nicio notificare noua' : `${count} motivatii de rezolvat`}
-                </p>
-              </div>
-              <button
-                onClick={() => setOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-              >
-                <X size={15} />
-              </button>
-            </div>
-
-            {/* Lista */}
-            <div className="flex-1 overflow-y-auto">
-              {notificari.length === 0 ? (
-                <div className="p-8 text-center mt-4">
-                  <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
-                    <Bell size={24} className="text-slate-300" />
-                  </div>
-                  <p className="text-sm font-medium text-slate-500">Nicio motivatie in asteptare</p>
-                  <p className="text-xs text-slate-400 mt-1">Vei fi notificat cand apar motivatii noi</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-slate-50">
-                  {notificari.map(n => (
-                    <div
-                      key={n.id}
-                      className={cn(
-                        'p-4 transition-all hover:bg-slate-50',
-                        !n.citita && 'bg-blue-50/40 border-l-2 border-l-blue-400'
-                      )}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 text-sm font-semibold shrink-0 mt-0.5">
-                          {n.angajat_name?.charAt(0)?.toUpperCase() || '?'}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between mb-0.5">
-                            <p className="text-xs font-semibold text-slate-900">{n.angajat_name}</p>
-                            {!n.citita && (
-                              <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
-                            )}
-                          </div>
-                          <p className="text-xs text-slate-400 mb-2">
-                            {n.date_referinta && format(parseISO(n.date_referinta), 'dd MMM yyyy', { locale: ro })}
-                          </p>
-                          <div className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 mb-3">
-                            <p className="text-xs text-slate-700 italic">"{n.mesaj}"</p>
-                          </div>
-                          <button
-                            onClick={() => { setApproveModal(n); setRaspuns('') }}
-                            className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs font-medium hover:bg-amber-100 transition-all"
-                          >
-                            <MessageSquare size={12} />
-                            Aproba / Respinge
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Modal decizie */}
-      {approveModal && (
-        <div className="fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 10000 }}>
-          <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => setApproveModal(null)}
-          />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">Aprobare motivatie</h3>
-                <p className="text-sm text-slate-400 mt-0.5">
-                  {approveModal.angajat_name} · {approveModal.date_referinta && format(parseISO(approveModal.date_referinta), 'dd MMM yyyy', { locale: ro })}
-                </p>
-              </div>
-              <button
-                onClick={() => setApproveModal(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="mb-4">
-              <p className="text-xs font-medium text-slate-500 mb-1.5">Motivatia angajatului</p>
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
-                <p className="text-sm text-slate-700 italic">"{approveModal.mesaj}"</p>
-              </div>
-            </div>
-
-            <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 mb-4 text-xs text-amber-700">
-              Daca aprobi, orele zilei vor fi considerate <strong>{formatNorma(normaZi)}</strong> si diferenta va fi <strong>±0m</strong>.
-            </div>
-
-            <div className="mb-5">
-              <label className="block text-xs font-medium text-slate-500 mb-1.5">
-                Raspunsul tau <span className="text-slate-400 font-normal">(optional)</span>
-              </label>
-              <textarea
-                value={raspuns}
-                onChange={e => setRaspuns(e.target.value)}
-                placeholder="Ex: Aprobat, conform politicii companiei."
-                rows={3}
-                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
-              />
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => handleDecizie(approveModal, 'respins')}
-                disabled={saving}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 font-medium text-sm transition-all disabled:opacity-50"
-              >
-                <XCircle size={16} />
-                {saving ? '...' : 'Respinge'}
-              </button>
-              <button
-                onClick={() => handleDecizie(approveModal, 'aprobat')}
-                disabled={saving}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-medium text-sm transition-all disabled:opacity-50"
-              >
-                <CheckCircle size={16} />
-                {saving ? '...' : 'Aproba'}
-              </button>
-            </div>
-
-            <button
-              onClick={() => setApproveModal(null)}
-              className="w-full mt-3 text-xs text-slate-400 hover:text-slate-600 py-1.5"
-            >
-              Anuleaza
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Portal — randat direct in body, peste orice */}
+      {portal}
     </>
   )
 }
