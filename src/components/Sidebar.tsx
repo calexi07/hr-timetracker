@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { LayoutDashboard, Clock, Users, Upload, LogOut, ChevronRight, Shield, FileText, UsersRound, CalendarDays } from 'lucide-react'
 import { useUser } from '@/components/UserContext'
+import NotificariDropdown from '@/components/NotificariDropdown'
 
 export default function Sidebar() {
   const pathname = usePathname()
@@ -27,6 +28,7 @@ export default function Sidebar() {
   }
 
   const role = user?.role || ''
+  const showNotificari = role === 'manager' || role === 'director' || role === 'admin'
 
   const navItems = [
     {
@@ -102,6 +104,14 @@ export default function Sidebar() {
             </Link>
           )
         })}
+
+        {/* Notificari pentru manageri si directori */}
+        {showNotificari && user?.id && (
+          <NotificariDropdown
+            userId={user.id}
+            normaZi={user.norma_ore ?? 8.25}
+          />
+        )}
       </nav>
 
       <div className="mx-4 border-t border-blue-700/50" />
