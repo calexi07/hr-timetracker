@@ -35,37 +35,43 @@ export default function Sidebar() {
       label: 'Panou principal',
       href: '/dashboard',
       icon: <LayoutDashboard size={18} />,
-      show: true
+      show: true,
+      comingSoon: false
     },
     {
       label: 'Echipa mea',
       href: '/team',
       icon: <UsersRound size={18} />,
-      show: role === 'manager' || role === 'director'
+      show: role === 'manager' || role === 'director',
+      comingSoon: false
     },
     {
       label: 'Cereri concediu',
       href: '/concedii',
       icon: <CalendarDays size={18} />,
-      show: true
+      show: true,
+      comingSoon: true
     },
     {
       label: 'Incarca date',
       href: '/admin/upload',
       icon: <Upload size={18} />,
-      show: role === 'admin'
+      show: role === 'admin',
+      comingSoon: false
     },
     {
       label: 'Gestionare angajati',
       href: '/admin/users',
       icon: <Users size={18} />,
-      show: role === 'admin'
+      show: role === 'admin',
+      comingSoon: false
     },
     {
       label: 'Istoric incarcari',
       href: '/admin/logs',
       icon: <FileText size={18} />,
-      show: role === 'admin'
+      show: role === 'admin',
+      comingSoon: false
     },
   ].filter(n => n.show)
 
@@ -88,7 +94,26 @@ export default function Sidebar() {
 
       <nav className="p-4 space-y-1 shrink-0">
         {navItems.map(item => {
-          const active = pathname === item.href || pathname.startsWith(item.href + '/')
+          const active = !item.comingSoon && (pathname === item.href || pathname.startsWith(item.href + '/'))
+
+          if (item.comingSoon) {
+            return (
+              <div
+                key={item.href}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-blue-400 cursor-not-allowed opacity-70"
+                title="In curand disponibil"
+              >
+                <span className="text-blue-500">
+                  {item.icon}
+                </span>
+                <span className="flex-1">{item.label}</span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-700 text-blue-300 font-medium shrink-0">
+                  In curand
+                </span>
+              </div>
+            )
+          }
+
           return (
             <Link key={item.href} href={item.href}
               className={cn(
