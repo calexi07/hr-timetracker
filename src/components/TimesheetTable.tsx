@@ -150,32 +150,42 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
     timesheetId?: string,
     observatieId?: string
   ) => {
-    if (!user?.id) return
+    // Ia userul direct din supabase auth
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+    if (!authUser) {
+      console.log('trimiteNotificare: no auth user')
+      return
+    }
 
-    // Gaseste managerul angajatului
+    // Gaseste angajatul si managerul sau
     const { data: angajat } = await supabase
       .from('app_users')
       .select('manager_id, name')
-      .eq('id', user.id)
+      .eq('id', authUser.id)
       .single()
 
-    if (!angajat?.manager_id) return
+    console.log('trimiteNotificare:', { angajat, date, motivatieText })
 
-    // Sterge notificarea veche pentru aceeasi zi daca exista
+    if (!angajat?.manager_id) {
+      console.log('Nu are manager asignat')
+      return
+    }
+
+    // Sterge notificarea veche pentru aceeasi zi
     await supabase
       .from('notificari')
       .delete()
       .eq('destinatar_id', angajat.manager_id)
-      .eq('angajat_id', user.id)
+      .eq('angajat_id', authUser.id)
       .eq('date_referinta', date)
 
     // Creeaza notificare noua
-    await supabase.from('notificari').insert({
+    const { error } = await supabase.from('notificari').insert({
       destinatar_id: angajat.manager_id,
       tip: 'motivatie_noua',
       titlu: `Motivatie noua de la ${angajat.name}`,
       mesaj: motivatieText,
-      angajat_id: user.id,
+      angajat_id: authUser.id,
       angajat_name: angajat.name,
       timesheet_id: timesheetId || null,
       observatie_id: observatieId || null,
@@ -183,6 +193,8 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
       citita: false,
       rezolvata: false,
     })
+
+    console.log('Notificare creata:', { error })
   }
 
   const handleSaveMotivatie = async () => {
@@ -209,7 +221,6 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
           : r
       ))
 
-      // Trimite notificare manager
       if (modal.motivatie.trim()) {
         await trimiteNotificare(modal.date, modal.motivatie.trim(), modal.pontaj.id, undefined)
       }
@@ -238,7 +249,6 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
           [modal.date]: { ...prev[modal.date], observatie: modal.motivatie.trim(), motivatie_status: 'in_asteptare', motivatie_raspuns: null }
         }))
 
-        // Trimite notificare manager
         await trimiteNotificare(modal.date, modal.motivatie.trim(), undefined, obsData?.id)
       } else {
         await supabase.from('observatii_zile').delete().eq('employee_id', empId).eq('date', modal.date)
@@ -290,7 +300,6 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
     await supabase
       .from('notificari')
       .update({ rezolvata: true, citita: true })
-      .eq('angajat_id', modal.pontaj?.employee_id ? undefined : empId)
       .eq('date_referinta', modal.date)
       .eq('rezolvata', false)
 
