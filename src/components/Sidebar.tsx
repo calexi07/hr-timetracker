@@ -81,6 +81,7 @@ export default function Sidebar() {
 
   return (
     <aside className="w-64 min-h-screen bg-blue-900 flex flex-col sticky top-0 h-screen">
+      {/* Logo */}
       <div className="p-6 border-b border-blue-700 shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-blue-500 flex items-center justify-center">
@@ -93,14 +94,14 @@ export default function Sidebar() {
         </div>
       </div>
 
+      {/* Nav */}
       <nav className="p-4 space-y-1 shrink-0">
         {navItems.map(item => {
           const active = !item.comingSoon && (pathname === item.href || pathname.startsWith(item.href + '/'))
 
           if (item.comingSoon) {
             return (
-              <div
-                key={item.href}
+              <div key={item.href}
                 className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-blue-400 cursor-not-allowed opacity-70"
               >
                 <span className="text-blue-500">{item.icon}</span>
@@ -135,8 +136,8 @@ export default function Sidebar() {
 
       <div className="mx-4 border-t border-blue-700/50" />
 
-      {/* Profil + Language + Deconectare */}
-      <div className="p-4 mt-auto shrink-0 space-y-1">
+      {/* Profil + Language + Logout — imediat sub separator */}
+      <div className="p-4 shrink-0 space-y-1">
         <Link
           href="/profile"
           className={cn(
@@ -158,7 +159,7 @@ export default function Sidebar() {
           <ChevronRight size={13} className="text-blue-400 group-hover:text-blue-200 shrink-0" />
         </Link>
 
-        {/* Language Switcher */}
+        {/* Language Switcher — 3 butoane inline */}
         <LanguageSwitcher />
 
         <button
