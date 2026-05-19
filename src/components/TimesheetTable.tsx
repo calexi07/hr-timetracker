@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { formatHours, formatDate, formatTime, downloadCSV, cn } from '@/lib/utils'
-import { Download, MessageSquare, X, Save, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { Download, MessageSquare, X, Save, CheckCircle, XCircle, Clock, ChevronLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import toast from 'react-hot-toast'
 import { eachDayOfInterval, parseISO, format, isWeekend } from 'date-fns'
@@ -10,9 +10,7 @@ import { useUser } from '@/components/UserContext'
 
 function getStatus(hours: number, norma: number, motivatieStatus?: string, tipAprobare?: string): { label: string; color: string } {
   if (motivatieStatus === 'aprobat') {
-    if (tipAprobare === 'cu_recuperare') {
-      return { label: 'Aprobat — recuperare', color: 'bg-amber-100 text-amber-700' }
-    }
+    if (tipAprobare === 'cu_recuperare') return { label: 'Aprobat — recuperare', color: 'bg-amber-100 text-amber-700' }
     return { label: 'Echilibrat', color: 'bg-green-100 text-green-700' }
   }
   if (hours === 0) return { label: 'Fara date', color: 'bg-slate-100 text-slate-500' }
@@ -25,20 +23,7 @@ function getStatus(hours: number, norma: number, motivatieStatus?: string, tipAp
 
 function formatDiff(hours: number, norma: number, motivatieStatus?: string, tipAprobare?: string): { text: string; color: string } {
   if (hours === 0) return { text: '—', color: 'text-slate-400' }
-  if (motivatieStatus === 'aprobat') {
-    if (tipAprobare === 'cu_recuperare') {
-      // Orele raman reale — arata diferenta reala
-      const diff = hours - norma
-      const totalMinute = Math.round(diff * 60)
-      const semn = totalMinute > 0 ? '+' : '-'
-      const abs = Math.abs(totalMinute)
-      const h = Math.floor(abs / 60)
-      const m = abs % 60
-      if (abs === 0) return { text: '±0m', color: 'text-green-600' }
-      return { text: `${semn}${h > 0 ? h + 'h ' : ''}${m}m`, color: 'text-amber-600 font-semibold' }
-    }
-    return { text: '±0m', color: 'text-green-600' }
-  }
+  if (motivatieStatus === 'aprobat' && tipAprobare !== 'cu_recuperare') return { text: '±0m', color: 'text-green-600' }
   const diff = hours - norma
   const totalMinute = Math.round(diff * 60)
   if (totalMinute === 0) return { text: '±0m', color: 'text-green-600' }
@@ -49,19 +34,20 @@ function formatDiff(hours: number, norma: number, motivatieStatus?: string, tipA
   let text = semn
   if (h > 0) text += `${h}h `
   text += `${m}m`
-  return { text, color: totalMinute > 0 ? 'text-blue-600 font-semibold' : 'text-red-600 font-semibold' }
+  const color = motivatieStatus === 'aprobat' && tipAprobare === 'cu_recuperare'
+    ? 'text-amber-600 font-semibold'
+    : totalMinute > 0 ? 'text-blue-600 font-semibold' : 'text-red-600 font-semibold'
+  return { text, color }
 }
 
 function getMotivatieStatusBadge(status: string | null | undefined, tipAprobare?: string | null) {
   if (!status) return null
   if (status === 'aprobat') {
-    if (tipAprobare === 'cu_recuperare') {
-      return (
-        <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
-          <CheckCircle size={10} />Aprobat — recuperare
-        </span>
-      )
-    }
+    if (tipAprobare === 'cu_recuperare') return (
+      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
+        <CheckCircle size={10} />Aprobat — recuperare
+      </span>
+    )
     return (
       <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">
         <CheckCircle size={10} />Aprobat
@@ -103,7 +89,12 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
     motivatie: string
     type: 'edit' | 'approve'
     raspuns: string
-  }>({ open: false, date: '', pontaj: null, motivatie: '', type: 'edit', raspuns: '' })
+    step: 'decizie' | 'tip_aprobare'
+    tipAprobare: 'fara_recuperare' | 'cu_recuperare'
+  }>({
+    open: false, date: '', pontaj: null, motivatie: '',
+    type: 'edit', raspuns: '', step: 'decizie', tipAprobare: 'fara_recuperare'
+  })
   const [saving, setSaving] = useState(false)
 
   const empId = employeeId || user?.employee_id
@@ -160,16 +151,16 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
 
   const openEditModal = (date: string, pontaj: any | null) => {
     const { text } = getMotivatieForRow(date, pontaj)
-    setModal({ open: true, date, pontaj, motivatie: text || '', type: 'edit', raspuns: '' })
+    setModal({ open: true, date, pontaj, motivatie: text || '', type: 'edit', raspuns: '', step: 'decizie', tipAprobare: 'fara_recuperare' })
   }
 
   const openApproveModal = (date: string, pontaj: any | null) => {
     const { text, raspuns } = getMotivatieForRow(date, pontaj)
-    setModal({ open: true, date, pontaj, motivatie: text || '', type: 'approve', raspuns: raspuns || '' })
+    setModal({ open: true, date, pontaj, motivatie: text || '', type: 'approve', raspuns: raspuns || '', step: 'decizie', tipAprobare: 'fara_recuperare' })
   }
 
   const closeModal = () => {
-    setModal({ open: false, date: '', pontaj: null, motivatie: '', type: 'edit', raspuns: '' })
+    setModal({ open: false, date: '', pontaj: null, motivatie: '', type: 'edit', raspuns: '', step: 'decizie', tipAprobare: 'fara_recuperare' })
   }
 
   const trimiteNotificare = async (date: string, motivatieText: string, timesheetId?: string, observatieId?: string) => {
@@ -271,13 +262,13 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
     onMotivatieUpdate?.()
   }
 
-  const handleDecizie = async (decizie: 'aprobat' | 'respins') => {
+  const handleRespinge = async () => {
     if (!modal.date) return
     setSaving(true)
 
     const { data: { user: authUser } } = await supabase.auth.getUser()
     const updateData = {
-      motivatie_status: decizie,
+      motivatie_status: 'respins',
       motivatie_aprobata_de: authUser?.id,
       motivatie_aprobata_la: new Date().toISOString(),
       motivatie_raspuns: modal.raspuns.trim() || null,
@@ -298,17 +289,51 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
 
     await supabase.from('notificari').update({ rezolvata: true, citita: true }).eq('date_referinta', modal.date).eq('rezolvata', false)
 
-    toast.success(decizie === 'aprobat' ? 'Motivatie aprobata' : 'Motivatie respinsa')
+    toast.success('Motivatie respinsa')
     closeModal()
     setSaving(false)
     onMotivatieUpdate?.()
   }
 
-  // Calcul total ore tinand cont de tip aprobare
-  const totalOre = rows.reduce((s, r) => {
-    if (r.motivatie_status === 'aprobat' && r.motivatie_tip_aprobare !== 'cu_recuperare') {
-      return s + NORMA
+  const handleAproba = async () => {
+    if (!modal.date) return
+    setSaving(true)
+
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+    const updateData = {
+      motivatie_status: 'aprobat',
+      motivatie_aprobata_de: authUser?.id,
+      motivatie_aprobata_la: new Date().toISOString(),
+      motivatie_raspuns: modal.raspuns.trim() || null,
+      motivatie_tip_aprobare: modal.tipAprobare,
     }
+
+    if (modal.pontaj) {
+      const { error } = await supabase.from('timesheets').update(updateData).eq('id', modal.pontaj.id)
+      if (error) { toast.error('Eroare: ' + error.message); setSaving(false); return }
+      setRows(prev => prev.map(r => r.id === modal.pontaj.id ? { ...r, ...updateData } : r))
+    } else {
+      const obsZi = observatiiZile[modal.date]
+      if (obsZi) {
+        await supabase.from('observatii_zile').update(updateData).eq('employee_id', empId).eq('date', modal.date)
+        setObservatiiZile(prev => ({ ...prev, [modal.date]: { ...prev[modal.date], ...updateData } }))
+      }
+    }
+
+    await supabase.from('notificari').update({ rezolvata: true, citita: true }).eq('date_referinta', modal.date).eq('rezolvata', false)
+
+    toast.success(
+      modal.tipAprobare === 'fara_recuperare'
+        ? 'Motivatie aprobata — ziua devine ' + formatHours(NORMA)
+        : 'Motivatie aprobata — se recupereaza intr-o alta zi'
+    )
+    closeModal()
+    setSaving(false)
+    onMotivatieUpdate?.()
+  }
+
+  const totalOre = rows.reduce((s, r) => {
+    if (r.motivatie_status === 'aprobat' && r.motivatie_tip_aprobare !== 'cu_recuperare') return s + NORMA
     return s + Number(r.hours_worked)
   }, 0)
   const totalNorma = rows.length * NORMA
@@ -334,9 +359,8 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
           'Intrare': pontaj?.check_in || '—', 'Iesire': pontaj?.check_out || '—',
           'Ore lucrate': oreEfective,
           'Diferenta': pontaj ? (diff >= 0 ? `+${diff}m` : `${diff}m`) : '—',
-          'Status': pontaj ? getStatus(Number(pontaj.hours_worked), NORMA, motivatieStatus, tipAprobare).label : 'Fara date',
+          'Status': getStatus(Number(pontaj?.hours_worked || 0), NORMA, motivatieStatus, tipAprobare).label,
           'Motivatie': motivatieText || '',
-          'Status motivatie': motivatieStatus || '',
           'Tip aprobare': tipAprobare || '',
           'Raspuns manager': raspuns || '',
         }
@@ -347,14 +371,19 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
 
   return (
     <div>
+      {/* Modal */}
       {modal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeModal} />
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 z-10">
+
+            {/* Header */}
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">
-                  {modal.type === 'approve' ? 'Aprobare motivatie' : 'Motivatie'}
+                  {modal.type === 'approve'
+                    ? modal.step === 'decizie' ? 'Decizie motivatie' : 'Tip aprobare'
+                    : 'Motivatie'}
                 </h3>
                 <p className="text-sm text-slate-400 mt-0.5">{formatDate(modal.date)}</p>
               </div>
@@ -363,6 +392,7 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
               </button>
             </div>
 
+            {/* Info pontaj */}
             {modal.pontaj && (
               <div className="bg-slate-50 rounded-xl p-3 mb-4 text-xs text-slate-500 flex gap-4">
                 <span>Intrare: <strong className="text-slate-700">{formatTime(modal.pontaj.check_in)}</strong></span>
@@ -373,6 +403,7 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
 
             {modal.type === 'approve' ? (
               <>
+                {/* Motivatia angajatului — mereu vizibila */}
                 <div className="mb-4">
                   <p className="text-xs font-medium text-slate-500 mb-1.5">Motivatia angajatului</p>
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
@@ -380,32 +411,122 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                   </div>
                 </div>
 
-                <div className="mb-5">
-                  <label className="block text-xs font-medium text-slate-500 mb-1.5">
-                    Raspunsul tau <span className="text-slate-400 font-normal">(optional)</span>
-                  </label>
-                  <textarea
-                    value={modal.raspuns}
-                    onChange={e => setModal(prev => ({ ...prev, raspuns: e.target.value }))}
-                    placeholder="Ex: Aprobat, conform politicii companiei."
-                    rows={3}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
-                  />
-                </div>
+                {modal.step === 'decizie' ? (
+                  <>
+                    {/* Raspuns */}
+                    <div className="mb-5">
+                      <label className="block text-xs font-medium text-slate-500 mb-1.5">
+                        Raspunsul tau <span className="text-slate-400 font-normal">(optional)</span>
+                      </label>
+                      <textarea
+                        value={modal.raspuns}
+                        onChange={e => setModal(prev => ({ ...prev, raspuns: e.target.value }))}
+                        placeholder="Ex: Aprobat. / Respins — lipsit nemotivat."
+                        rows={3}
+                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
+                      />
+                    </div>
 
-                <div className="flex gap-3">
-                  <button onClick={() => handleDecizie('respins')} disabled={saving}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 font-medium text-sm transition-all disabled:opacity-50">
-                    <XCircle size={16} />{saving ? '...' : 'Respinge'}
-                  </button>
-                  <button onClick={() => handleDecizie('aprobat')} disabled={saving}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-medium text-sm transition-all disabled:opacity-50">
-                    <CheckCircle size={16} />{saving ? '...' : 'Aproba'}
-                  </button>
-                </div>
-                <button onClick={closeModal} className="w-full mt-3 text-xs text-slate-400 hover:text-slate-600 py-1.5">
-                  Anuleaza
-                </button>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handleRespinge}
+                        disabled={saving}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 font-medium text-sm transition-all disabled:opacity-50"
+                      >
+                        <XCircle size={16} />
+                        {saving ? '...' : 'Respinge'}
+                      </button>
+                      <button
+                        onClick={() => setModal(prev => ({ ...prev, step: 'tip_aprobare' }))}
+                        disabled={saving}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-medium text-sm transition-all disabled:opacity-50"
+                      >
+                        <CheckCircle size={16} />
+                        Aproba
+                      </button>
+                    </div>
+                    <button onClick={closeModal} className="w-full mt-3 text-xs text-slate-400 hover:text-slate-600 py-1.5">
+                      Anuleaza
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {/* Step 2: Tip aprobare */}
+                    <div className="mb-5">
+                      <p className="text-sm font-medium text-slate-700 mb-3">Ce se intampla cu timpul de recuperat?</p>
+
+                      <div className="flex flex-col gap-3">
+                        <button
+                          onClick={() => setModal(prev => ({ ...prev, tipAprobare: 'fara_recuperare' }))}
+                          className={cn(
+                            'p-4 rounded-xl border-2 text-left transition-all',
+                            modal.tipAprobare === 'fara_recuperare'
+                              ? 'border-blue-500 bg-blue-50'
+                              : 'border-slate-200 bg-white hover:border-slate-300'
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all',
+                              modal.tipAprobare === 'fara_recuperare' ? 'border-blue-500 bg-blue-500' : 'border-slate-300'
+                            )}>
+                              {modal.tipAprobare === 'fara_recuperare' && (
+                                <div className="w-2 h-2 rounded-full bg-white" />
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">Ziua devine {formatHours(NORMA)}</p>
+                              <p className="text-xs text-slate-500 mt-0.5">Orele se considera norma — nimic de recuperat</p>
+                            </div>
+                          </div>
+                        </button>
+
+                        <button
+                          onClick={() => setModal(prev => ({ ...prev, tipAprobare: 'cu_recuperare' }))}
+                          className={cn(
+                            'p-4 rounded-xl border-2 text-left transition-all',
+                            modal.tipAprobare === 'cu_recuperare'
+                              ? 'border-amber-500 bg-amber-50'
+                              : 'border-slate-200 bg-white hover:border-slate-300'
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all',
+                              modal.tipAprobare === 'cu_recuperare' ? 'border-amber-500 bg-amber-500' : 'border-slate-300'
+                            )}>
+                              {modal.tipAprobare === 'cu_recuperare' && (
+                                <div className="w-2 h-2 rounded-full bg-white" />
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">Se recupereaza intr-o alta zi</p>
+                              <p className="text-xs text-slate-500 mt-0.5">Orele raman reale — diferenta se recupereaza ulterior</p>
+                            </div>
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setModal(prev => ({ ...prev, step: 'decizie' }))}
+                        className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium text-sm transition-all"
+                      >
+                        <ChevronLeft size={16} />
+                        Inapoi
+                      </button>
+                      <button
+                        onClick={handleAproba}
+                        disabled={saving}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-medium text-sm transition-all disabled:opacity-50"
+                      >
+                        <CheckCircle size={16} />
+                        {saving ? 'Se salveaza...' : 'Confirma aprobarea'}
+                      </button>
+                    </div>
+                  </>
+                )}
               </>
             ) : (
               <>
@@ -474,8 +595,6 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
               const hasMot = !!motivatieText
               const canApproveThis = isManager && hasMot && motivatieStatus === 'in_asteptare'
               const canViewDecizie = hasMot && (motivatieStatus === 'aprobat' || motivatieStatus === 'respins')
-
-              // Ore efective
               const oreEfective = pontaj && motivatieStatus === 'aprobat' && tipAprobare !== 'cu_recuperare'
                 ? NORMA
                 : pontaj ? Number(pontaj.hours_worked) : 0
