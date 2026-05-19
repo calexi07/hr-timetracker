@@ -138,19 +138,20 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
         )}
       </button>
 
-      {/* Panel notificari */}
+      {/* Panel + Overlay */}
       {open && (
         <>
-          {/* Overlay */}
+          {/* Overlay peste tot inclusiv grafice */}
           <div
-            className="fixed inset-0 z-30 bg-black/20 backdrop-blur-[1px]"
+            className="fixed inset-0 bg-black/30"
+            style={{ zIndex: 9998 }}
             onClick={() => setOpen(false)}
           />
 
-          {/* Panel */}
+          {/* Panel notificari */}
           <div
-            id="notificari-dropdown"
-            className="fixed top-0 left-64 h-screen w-80 bg-white shadow-2xl border-r border-slate-100 z-40 flex flex-col"
+            className="fixed top-0 left-64 h-screen w-80 bg-white shadow-2xl flex flex-col"
+            style={{ zIndex: 9999 }}
           >
             {/* Header */}
             <div className="p-4 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white">
@@ -225,12 +226,12 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
 
       {/* Modal decizie */}
       {approveModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div className="fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 10000 }}>
           <div
             className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             onClick={() => setApproveModal(null)}
           />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 z-10">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">Aprobare motivatie</h3>
