@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { LayoutDashboard, Clock, Users, Upload, LogOut, ChevronRight, Shield, FileText, UsersRound, CalendarDays } from 'lucide-react'
 import { useUser } from '@/components/UserContext'
 import NotificariDropdown from '@/components/NotificariDropdown'
+import LanguageSwitcher from '@/components/LanguageSwitcher'
 
 export default function Sidebar() {
   const pathname = usePathname()
@@ -101,11 +102,8 @@ export default function Sidebar() {
               <div
                 key={item.href}
                 className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-blue-400 cursor-not-allowed opacity-70"
-                title="In curand disponibil"
               >
-                <span className="text-blue-500">
-                  {item.icon}
-                </span>
+                <span className="text-blue-500">{item.icon}</span>
                 <span className="flex-1">{item.label}</span>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-blue-700 text-blue-300 font-medium shrink-0">
                   In curand
@@ -130,22 +128,19 @@ export default function Sidebar() {
           )
         })}
 
-        {/* Notificari pentru manageri si directori */}
         {showNotificari && user?.id && (
-          <NotificariDropdown
-            userId={user.id}
-            normaZi={user.norma_ore ?? 8.25}
-          />
+          <NotificariDropdown userId={user.id} normaZi={user.norma_ore ?? 8.25} />
         )}
       </nav>
 
       <div className="mx-4 border-t border-blue-700/50" />
 
-      <div className="p-4 shrink-0">
+      {/* Profil + Language + Deconectare */}
+      <div className="p-4 mt-auto shrink-0 space-y-1">
         <Link
           href="/profile"
           className={cn(
-            'flex items-center gap-3 px-3 py-2.5 rounded-xl mb-2 transition-all group',
+            'flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group',
             pathname === '/profile' ? 'bg-blue-500' : 'bg-blue-800/50 hover:bg-blue-700/50'
           )}
         >
@@ -162,6 +157,9 @@ export default function Sidebar() {
           </div>
           <ChevronRight size={13} className="text-blue-400 group-hover:text-blue-200 shrink-0" />
         </Link>
+
+        {/* Language Switcher */}
+        <LanguageSwitcher />
 
         <button
           onClick={handleLogout}
