@@ -39,9 +39,12 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
   const count = nerezolvate.length
 
   useEffect(() => {
+    if (!userId) {
+      console.log('NotificariDropdown: userId e null/undefined')
+      return
+    }
+    console.log('NotificariDropdown: loading pentru userId:', userId)
     loadNotificari()
-
-    // Refresh la fiecare 30 secunde
     const interval = setInterval(loadNotificari, 30000)
     return () => clearInterval(interval)
   }, [userId])
@@ -57,25 +60,29 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
   }, [])
 
   const loadNotificari = async () => {
-    const { data } = await supabase
+    if (!userId) return
+
+    console.log('loadNotificari pentru:', userId)
+
+    const { data, error } = await supabase
       .from('notificari')
       .select('*')
       .eq('destinatar_id', userId)
       .eq('rezolvata', false)
       .order('created_at', { ascending: false })
+
+    console.log('notificari rezultat:', { data, error, count: data?.length })
     setNotificari(data || [])
   }
 
   const handleOpen = async () => {
     setOpen(!open)
-    // Marcheaza toate ca citite
     if (!open && count > 0) {
       await supabase
         .from('notificari')
         .update({ citita: true })
         .eq('destinatar_id', userId)
         .eq('citita', false)
-
       setNotificari(prev => prev.map(n => ({ ...n, citita: true })))
     }
   }
@@ -106,19 +113,9 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
         .eq('id', notificare.observatie_id)
       success = !error
       if (error) toast.error('Eroare: ' + error.message)
-    } else {
-      // Incearca dupa angajat si data
-      const { error: e1 } = await supabase
-        .from('timesheets')
-        .update(updateData)
-        .eq('date', notificare.date_referinta)
-        .not('motivatie', 'is', null)
-
-      if (!e1) success = true
     }
 
     if (success) {
-      // Marcheaza notificarea ca rezolvata
       await supabase
         .from('notificari')
         .update({ rezolvata: true, citita: true })
@@ -142,7 +139,6 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
 
   return (
     <div className="relative" ref={dropdownRef}>
-      {/* Buton clopotel */}
       <button
         onClick={handleOpen}
         className={cn(
@@ -159,7 +155,6 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
         )}
       </button>
 
-      {/* Dropdown */}
       {open && (
         <div className="absolute left-full top-0 ml-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 overflow-hidden">
           <div className="p-4 border-b border-slate-100 flex items-center justify-between">
@@ -205,17 +200,13 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
                         <p className="text-xs text-slate-700 bg-slate-100 rounded-lg px-2 py-1.5 mb-3">
                           "{n.mesaj}"
                         </p>
-
-                        {/* Butoane aprobare */}
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => { setApproveModal(n); setRaspuns('') }}
-                            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs font-medium hover:bg-amber-100 transition-all"
-                          >
-                            <MessageSquare size={12} />
-                            Decide
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => { setApproveModal(n); setRaspuns('') }}
+                          className="w-full flex items-center justify-center gap-1 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs font-medium hover:bg-amber-100 transition-all"
+                        >
+                          <MessageSquare size={12} />
+                          Decide
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -226,7 +217,6 @@ export default function NotificariDropdown({ userId, normaZi = 8.25 }: Props) {
         </div>
       )}
 
-      {/* Modal decizie */}
       {approveModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setApproveModal(null)} />
