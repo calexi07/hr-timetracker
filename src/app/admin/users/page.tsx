@@ -262,21 +262,15 @@ export default function UsersPage() {
     return 'bg-green-100 text-green-700'
   }
 
-  const formatLastLogin = (lastLogin: string | null) => {
-    if (!lastLogin) return null
-    const date = new Date(lastLogin)
-    const acum = Date.now() - date.getTime()
-    const minute = Math.floor(acum / 60000)
-    const ore = Math.floor(minute / 60)
-    const zile = Math.floor(ore / 24)
-
-    if (minute < 1) return { data: 'Acum', ora: '', color: 'text-green-600' }
-    if (minute < 60) return { data: `${minute}m fa`, ora: '', color: 'text-green-600' }
-    if (ore < 24) return { data: `${ore}h fa`, ora: format(date, 'HH:mm'), color: 'text-blue-600' }
-    if (zile === 1) return { data: 'Ieri', ora: format(date, 'HH:mm'), color: 'text-slate-600' }
-    if (zile < 7) return { data: `${zile} zile fa`, ora: format(date, 'dd MMM', { locale: ro }), color: 'text-slate-500' }
-    return { data: format(date, 'dd MMM yyyy', { locale: ro }), ora: format(date, 'HH:mm'), color: 'text-slate-400' }
+const formatLastLogin = (lastLogin: string | null) => {
+  if (!lastLogin) return null
+  const date = new Date(lastLogin)
+  return {
+    data: format(date, 'dd MMM yyyy', { locale: ro }),
+    ora: format(date, 'HH:mm'),
+    color: 'text-slate-700'
   }
+}
 
   if (loading) return <div className="p-8 text-slate-400">Se incarca...</div>
 
