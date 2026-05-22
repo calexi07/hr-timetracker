@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import toast from 'react-hot-toast'
+import { format } from 'date-fns'
+import { ro } from 'date-fns/locale'
 import { Save, Trash2, UserPlus, X, Eye, EyeOff, KeyRound, RotateCcw, CheckCircle2, XCircle } from 'lucide-react'
 
 const ROLURI = [
@@ -260,6 +262,22 @@ export default function UsersPage() {
     return 'bg-green-100 text-green-700'
   }
 
+  const formatLastLogin = (lastLogin: string | null) => {
+    if (!lastLogin) return null
+    const date = new Date(lastLogin)
+    const acum = Date.now() - date.getTime()
+    const minute = Math.floor(acum / 60000)
+    const ore = Math.floor(minute / 60)
+    const zile = Math.floor(ore / 24)
+
+    if (minute < 1) return { data: 'Acum', ora: '', color: 'text-green-600' }
+    if (minute < 60) return { data: `${minute}m fa`, ora: '', color: 'text-green-600' }
+    if (ore < 24) return { data: `${ore}h fa`, ora: format(date, 'HH:mm'), color: 'text-blue-600' }
+    if (zile === 1) return { data: 'Ieri', ora: format(date, 'HH:mm'), color: 'text-slate-600' }
+    if (zile < 7) return { data: `${zile} zile fa`, ora: format(date, 'dd MMM', { locale: ro }), color: 'text-slate-500' }
+    return { data: format(date, 'dd MMM yyyy', { locale: ro }), ora: format(date, 'HH:mm'), color: 'text-slate-400' }
+  }
+
   if (loading) return <div className="p-8 text-slate-400">Se incarca...</div>
 
   return (
@@ -431,6 +449,7 @@ export default function UsersPage() {
               <th className="text-left px-4 py-3 font-medium text-slate-500">Norma/zi</th>
               <th className="text-left px-4 py-3 font-medium text-slate-500">Superior</th>
               <th className="text-left px-4 py-3 font-medium text-slate-500">Termeni</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-500">Ultima logare</th>
               <th className="text-left px-4 py-3 font-medium text-slate-500">Credentiale</th>
               <th className="px-4 py-3" />
             </tr>
@@ -442,6 +461,7 @@ export default function UsersPage() {
               const showManagerField = ROLURI_CU_MANAGER.includes(currentRole)
               const currentManagerId = edit?.manager_id ?? String(user.manager_id || '')
               const currentNorma = edit?.norma_ore ?? String(user.norma_ore ?? '8.25')
+              const lastLogin = formatLastLogin(user.last_login)
 
               return (
                 <tr key={user.id} className="border-b border-slate-50 hover:bg-slate-50">
@@ -514,6 +534,20 @@ export default function UsersPage() {
                         {resettingConsent === user.id ? <span className="text-xs">...</span> : <RotateCcw size={13} />}
                       </button>
                     </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    {lastLogin ? (
+                      <div>
+                        <p className={cn('text-xs font-medium', lastLogin.color)}>
+                          {lastLogin.data}
+                        </p>
+                        {lastLogin.ora && (
+                          <p className="text-xs text-slate-400">{lastLogin.ora}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-300">Niciodata</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <button onClick={() => openCredModal(user)}
