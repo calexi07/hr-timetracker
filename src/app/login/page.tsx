@@ -38,7 +38,7 @@ export default function LoginPage() {
     if (!pin) return
     setLoading(true)
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data: authData, error } = await supabase.auth.signInWithPassword({
       email,
       password: pin
     })
@@ -48,6 +48,14 @@ export default function LoginPage() {
       setPin('')
       setLoading(false)
       return
+    }
+
+    // Salveaza last_login
+    if (authData?.user?.id) {
+      await supabase
+        .from('app_users')
+        .update({ last_login: new Date().toISOString() })
+        .eq('id', authData.user.id)
     }
 
     router.push('/')
@@ -208,7 +216,6 @@ export default function LoginPage() {
                 </p>
               </div>
 
-              {/* Explicatie PIN */}
               <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 mb-6">
                 <div className="flex items-start gap-3">
                   <div className="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center shrink-0 mt-0.5">
