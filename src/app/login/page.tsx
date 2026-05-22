@@ -50,15 +50,13 @@ export default function LoginPage() {
       return
     }
 
-    // Salveaza last_login folosind getUser() pentru siguranta
-    const { data: { user: currentUser } } = await supabase.auth.getUser()
-    if (currentUser?.id) {
-      const { error: updateError } = await supabase
+    // Folosim direct authData.user — deja disponibil fara getUser()
+    const userId = authData?.user?.id
+    if (userId) {
+      await supabase
         .from('app_users')
         .update({ last_login: new Date().toISOString() })
-        .eq('id', currentUser.id)
-
-      console.log('last_login update:', { userId: currentUser.id, updateError })
+        .eq('id', userId)
     }
 
     router.push('/')
