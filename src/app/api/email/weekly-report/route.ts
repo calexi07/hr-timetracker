@@ -99,61 +99,41 @@ export async function GET(request: Request) {
               <h2 style="margin:0 0 16px;color:#0f172a;font-size:18px;font-weight:600;">Buna ziua, ${firstName}!</h2>
               <p style="margin:0 0 16px;color:#475569;font-size:15px;line-height:1.6;">
                 Ai <strong style="color:#1e3a8a;">${totalMotivatie} motivatie${totalMotivatie > 1 ? 'i' : ''}</strong> in asteptare de la membrii echipei tale.
-                Te rugam sa le analizezi si sa le aprobi sau respingi cat mai curand.
+                Te rugam sa le analizezi si sa le aprobi sau respingi cat mai curand prin accesarea platformei Pontaj HR.
               </p>
               
-              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:20px;">
+              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px;">
                 <p style="margin:0 0 12px;color:#374151;font-size:14px;font-weight:600;">Angajati cu motivatii in asteptare:</p>
                 <ul style="margin:0;padding-left:20px;color:#475569;font-size:14px;line-height:1.8;">
                   ${listaRO}
                 </ul>
               </div>
-
-              <table cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="background:#1e3a8a;border-radius:10px;padding:12px 24px;">
-                    <a href="https://hr-timetracker.vercel.app/team" style="color:white;text-decoration:none;font-size:14px;font-weight:600;">
-                      Mergi la Echipa mea →
-                    </a>
-                  </td>
-                </tr>
-              </table>
             </td>
           </tr>
 
           <!-- Delimitator -->
           <tr>
-            <td style="padding:8px 40px;">
+            <td style="padding:16px 40px;">
               <hr style="border:none;border-top:2px dashed #e2e8f0;margin:0;">
             </td>
           </tr>
 
           <!-- Sectiunea Engleza -->
           <tr>
-            <td style="padding:16px 40px 32px;">
+            <td style="padding:0 40px 32px;">
               <p style="margin:0 0 4px;color:#6b7280;font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">🇬🇧 English</p>
               <h2 style="margin:0 0 16px;color:#0f172a;font-size:18px;font-weight:600;">Good morning, ${firstName}!</h2>
               <p style="margin:0 0 16px;color:#475569;font-size:15px;line-height:1.6;">
                 You have <strong style="color:#1e3a8a;">${totalMotivatie} pending justification${totalMotivatie > 1 ? 's' : ''}</strong> from your team members.
-                Please review and approve or reject them as soon as possible.
+                Please review and approve or reject them as soon as possible by accessing the Pontaj HR platform.
               </p>
               
-              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:20px;">
+              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px;">
                 <p style="margin:0 0 12px;color:#374151;font-size:14px;font-weight:600;">Team members with pending justifications:</p>
                 <ul style="margin:0;padding-left:20px;color:#475569;font-size:14px;line-height:1.8;">
                   ${listaEN}
                 </ul>
               </div>
-
-              <table cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="background:#1e3a8a;border-radius:10px;padding:12px 24px;">
-                    <a href="https://hr-timetracker.vercel.app/team" style="color:white;text-decoration:none;font-size:14px;font-weight:600;">
-                      Go to My Team →
-                    </a>
-                  </td>
-                </tr>
-              </table>
             </td>
           </tr>
 
@@ -175,7 +155,7 @@ export async function GET(request: Request) {
 </html>
       `
 
-      const { data: emailData, error: emailError } = await resend.emails.send({
+      const { error: emailError } = await resend.emails.send({
         from: 'Pontaj HR <onboarding@resend.dev>',
         to: ['cristianstefan.alexiu@gmail.com'], // TEST — schimba cu manager.email dupa verificarea domeniului
         subject: `📋 [${manager.name}] ${totalMotivatie} motivatie${totalMotivatie > 1 ? 'i' : ''} in asteptare — Raport Saptamanal`,
