@@ -1,13 +1,34 @@
 import { NextResponse } from 'next/server'
-import { Resend } from 'resend'
 import { createClient } from '@supabase/supabase-js'
-
-const resend = new Resend(process.env.RESEND_API_KEY)
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+async function sendEmailBrevo(to: string, subject: string, html: string) {
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'accept': 'application/json',
+      'api-key': process.env.BREVO_API_KEY!,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      sender: { name: 'Pontaj HR', email: 'cristianstefan.alexiu@gmail.com' },
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+    }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(JSON.stringify(error))
+  }
+
+  return await response.json()
+}
 
 export async function GET(request: Request) {
   try {
@@ -155,17 +176,15 @@ export async function GET(request: Request) {
 </html>
       `
 
-      const { error: emailError } = await resend.emails.send({
-        from: 'Pontaj HR <onboarding@resend.dev>',
-        to: ['cristianstefan.alexiu@gmail.com'], // TEST — schimba cu manager.email dupa verificarea domeniului
-        subject: `📋 [${manager.name}] ${totalMotivatie} motivatie${totalMotivatie > 1 ? 'i' : ''} in asteptare — Raport Saptamanal`,
-        html: htmlEmail,
-      })
-
-      if (emailError) {
-        results.push({ manager: manager.email, error: emailError.message })
-      } else {
+      try {
+        await sendEmailBrevo(
+          manager.email,
+          `📋 [${manager.name}] ${totalMotivatie} motivatie${totalMotivatie > 1 ? 'i' : ''} in asteptare — Raport Saptamanal`,
+          htmlEmail
+        )
         results.push({ manager: manager.email, sent: true, motivatii: totalMotivatie })
+      } catch (emailError: any) {
+        results.push({ manager: manager.email, error: emailError.message })
       }
     }
 
