@@ -2,7 +2,7 @@
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine
 } from 'recharts'
-import { format, parseISO } from 'date-fns'
+import { format, parseISO, isWeekend } from 'date-fns'
 import { ro } from 'date-fns/locale'
 
 function decimalToHoursMinutes(decimal: number): string {
@@ -14,6 +14,7 @@ function decimalToHoursMinutes(decimal: number): string {
 
 export default function HoursChart({ timesheets }: { timesheets: any[] }) {
   const data = [...timesheets]
+    .filter(t => !isWeekend(parseISO(t.date)))
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(-30)
     .map(t => ({
