@@ -114,16 +114,20 @@ export default function DashboardPage() {
 
   const normaZi = appUser?.norma_ore ?? 8.25
 
-  // Filtreaza weekendurile din toate calculele
+  // Filtreaza weekendurile — identic cu TimesheetTable
   const timesheetsWeekdays = timesheets.filter(r => !isWeekend(parseISO(r.date)))
 
+  // Calcul total ore — identic cu TimesheetTable rowsWeekdays
   const totalHours = timesheetsWeekdays.reduce((s, r) => {
     if (r.motivatie_status === 'aprobat' && r.motivatie_tip_aprobare !== 'cu_recuperare') return s + normaZi
     return s + Number(r.hours_worked)
   }, 0)
 
   const daysWorked = timesheetsWeekdays.length
-  const maxDay = timesheetsWeekdays.reduce((best, r) => Number(r.hours_worked) > best ? Number(r.hours_worked) : best, 0)
+
+  const maxDay = timesheetsWeekdays.reduce((best, r) =>
+    Number(r.hours_worked) > best ? Number(r.hours_worked) : best, 0)
+
   const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
   const weekHours = timesheetsWeekdays
     .filter(r => r.date >= weekStart)
@@ -131,6 +135,8 @@ export default function DashboardPage() {
       if (r.motivatie_status === 'aprobat' && r.motivatie_tip_aprobare !== 'cu_recuperare') return s + normaZi
       return s + Number(r.hours_worked)
     }, 0)
+
+  // Norma = doar zilele cu pontaj (nu zilele calendaristice)
   const totalNorma = daysWorked * normaZi
   const totalDiff = totalHours - totalNorma
   const totalDiffMin = Math.round(totalDiff * 60)
