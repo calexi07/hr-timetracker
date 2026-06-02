@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatHours, cn } from '@/lib/utils'
 import { Clock, Calendar, TrendingUp, Award, AlertTriangle } from 'lucide-react'
-import { format, startOfWeek, endOfWeek } from 'date-fns'
+import { format, startOfWeek, endOfWeek, isWeekend, parseISO } from 'date-fns'
 import TimesheetTable from '@/components/TimesheetTable'
 import DateFilter from '@/components/DateFilter'
 import HoursChart from '@/components/charts/HoursChart'
@@ -114,18 +114,21 @@ export default function DashboardPage() {
 
   const normaZi = appUser?.norma_ore ?? 8.25
 
-  const totalHours = timesheets.reduce((s, r) => {
-    if (r.motivatie_status === 'aprobat') return s + normaZi
+  // Filtreaza weekendurile din toate calculele
+  const timesheetsWeekdays = timesheets.filter(r => !isWeekend(parseISO(r.date)))
+
+  const totalHours = timesheetsWeekdays.reduce((s, r) => {
+    if (r.motivatie_status === 'aprobat' && r.motivatie_tip_aprobare !== 'cu_recuperare') return s + normaZi
     return s + Number(r.hours_worked)
   }, 0)
 
-  const daysWorked = timesheets.length
-  const maxDay = timesheets.reduce((best, r) => Number(r.hours_worked) > best ? Number(r.hours_worked) : best, 0)
+  const daysWorked = timesheetsWeekdays.length
+  const maxDay = timesheetsWeekdays.reduce((best, r) => Number(r.hours_worked) > best ? Number(r.hours_worked) : best, 0)
   const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
-  const weekHours = timesheets
+  const weekHours = timesheetsWeekdays
     .filter(r => r.date >= weekStart)
     .reduce((s, r) => {
-      if (r.motivatie_status === 'aprobat') return s + normaZi
+      if (r.motivatie_status === 'aprobat' && r.motivatie_tip_aprobare !== 'cu_recuperare') return s + normaZi
       return s + Number(r.hours_worked)
     }, 0)
   const totalNorma = daysWorked * normaZi
@@ -256,7 +259,7 @@ export default function DashboardPage() {
 
             <div className="card p-6 mb-8">
               <h2 className="text-base font-semibold text-slate-900 mb-4">Ore zilnice</h2>
-              <HoursChart timesheets={timesheets} />
+              <HoursChart timesheets={timesheetsWeekdays} />
             </div>
 
             <div className="card p-6">
@@ -266,7 +269,7 @@ export default function DashboardPage() {
                   <span className="text-xs text-slate-400">
                     Norma: {formatHours(normaZi)}/zi
                   </span>
-                  <span className="text-xs text-slate-400">{timesheets.length} inregistrari</span>
+                  <span className="text-xs text-slate-400">{timesheetsWeekdays.length} inregistrari</span>
                 </div>
               </div>
               <TimesheetTable
