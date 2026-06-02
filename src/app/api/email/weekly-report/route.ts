@@ -6,19 +6,19 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-async function sendEmailBrevo(to: string, subject: string, html: string) {
-  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+async function sendEmailResend(to: string, subject: string, html: string) {
+  const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
-      'accept': 'application/json',
-      'api-key': process.env.BREVO_API_KEY!,
-      'content-type': 'application/json',
+      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      sender: { name: 'Pontaj HR', email: 'cristianstefan.alexiu@gmail.com' },
-      to: [{ email: to }],
+      from: 'Pontaj HR <onboarding@resend.dev>',
+      to: ['cristianstefan.alexiu@gmail.com'],
       subject,
-      htmlContent: html,
+      html,
+      reply_to: 'noreply@pontaj-hr.ro',
     }),
   })
 
@@ -122,7 +122,6 @@ export async function GET(request: Request) {
                 Ai <strong style="color:#1e3a8a;">${totalMotivatie} motivatie${totalMotivatie > 1 ? 'i' : ''}</strong> in asteptare de la membrii echipei tale.
                 Te rugam sa le analizezi si sa le aprobi sau respingi cat mai curand prin accesarea platformei Pontaj HR.
               </p>
-              
               <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px;">
                 <p style="margin:0 0 12px;color:#374151;font-size:14px;font-weight:600;">Angajati cu motivatii in asteptare:</p>
                 <ul style="margin:0;padding-left:20px;color:#475569;font-size:14px;line-height:1.8;">
@@ -148,7 +147,6 @@ export async function GET(request: Request) {
                 You have <strong style="color:#1e3a8a;">${totalMotivatie} pending justification${totalMotivatie > 1 ? 's' : ''}</strong> from your team members.
                 Please review and approve or reject them as soon as possible by accessing the Pontaj HR platform.
               </p>
-              
               <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px;">
                 <p style="margin:0 0 12px;color:#374151;font-size:14px;font-weight:600;">Team members with pending justifications:</p>
                 <ul style="margin:0;padding-left:20px;color:#475569;font-size:14px;line-height:1.8;">
@@ -177,7 +175,7 @@ export async function GET(request: Request) {
       `
 
       try {
-        await sendEmailBrevo(
+        await sendEmailResend(
           manager.email,
           `📋 [${manager.name}] ${totalMotivatie} motivatie${totalMotivatie > 1 ? 'i' : ''} in asteptare — Raport Saptamanal`,
           htmlEmail
