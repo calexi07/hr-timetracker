@@ -58,6 +58,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         }
         setUser(info)
         sessionStorage.setItem('pontaj_user', JSON.stringify(info))
+
+        // Actualizeaza last_login la fiecare vizita
+        await supabase
+          .from('app_users')
+          .update({ last_login: new Date().toISOString() })
+          .eq('id', authUser.id)
       }
     }
 
