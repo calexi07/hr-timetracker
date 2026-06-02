@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/email/weekly-report?secret=pontaj-hr-krka-2024",
+      "schedule": "0 8 * * 1"
+    }
+  ]
+}
