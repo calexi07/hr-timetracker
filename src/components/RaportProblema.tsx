@@ -1,19 +1,31 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { MessageSquarePlus, X, Upload, FileText, CheckCircle, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUser } from '@/components/UserContext'
 import toast from 'react-hot-toast'
+import { usePathname } from 'next/navigation'
 
 export default function RaportProblema() {
   const supabase = createClient()
   const user = useUser()
+  const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const [descriere, setDescriere] = useState('')
   const [screenshot, setScreenshot] = useState<File | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [trimis, setTrimis] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Nu afisa pe login sau inainte de mount
+  if (!mounted) return null
+  if (pathname?.startsWith('/login')) return null
+  if (pathname?.startsWith('/terms')) return null
 
   const handleSubmit = async () => {
     if (!descriere.trim()) {
@@ -26,7 +38,6 @@ export default function RaportProblema() {
     let screenshotUrl = null
     let screenshotName = null
 
-    // Upload screenshot daca exista
     if (screenshot) {
       const ext = screenshot.name.split('.').pop()
       const fileName = `${user?.id || 'anonim'}/${Date.now()}.${ext}`
@@ -44,7 +55,6 @@ export default function RaportProblema() {
       screenshotName = screenshot.name
     }
 
-    // Salveaza raportul
     const { error } = await supabase
       .from('rapoarte_probleme')
       .insert({
@@ -66,7 +76,6 @@ export default function RaportProblema() {
     setTrimis(true)
     setSubmitting(false)
 
-    // Reset dupa 3 secunde
     setTimeout(() => {
       setTrimis(false)
       setDescriere('')
@@ -82,12 +91,9 @@ export default function RaportProblema() {
     setTrimis(false)
   }
 
-// Nu afisa butonul daca userul nu e logat
-if (!user) return null
-
-return (
-  <>
-    {/* Bubble button */}
+  return (
+    <>
+      {/* Bubble button */}
       <button
         onClick={() => setOpen(true)}
         className={cn(
@@ -129,7 +135,6 @@ return (
             </div>
 
             {trimis ? (
-              /* Confirmare trimitere */
               <div className="p-8 text-center">
                 <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
                   <CheckCircle size={32} className="text-green-600" />
@@ -140,7 +145,6 @@ return (
                 </p>
               </div>
             ) : (
-              /* Form */
               <div className="p-5 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">
@@ -161,7 +165,7 @@ return (
                     Screenshot <span className="text-slate-400 font-normal">(optional)</span>
                   </label>
                   <div className={cn(
-                    'border-2 border-dashed rounded-xl p-4 text-center transition-all cursor-pointer',
+                    'border-2 border-dashed rounded-xl p-4 text-center transition-all',
                     screenshot ? 'border-green-300 bg-green-50' : 'border-slate-200 hover:border-blue-300 hover:bg-blue-50/30'
                   )}>
                     {screenshot ? (
@@ -198,10 +202,11 @@ return (
                   </div>
                 </div>
 
-                {/* Info user */}
-                <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-500">
-                  Raportat ca: <strong className="text-slate-700">{user?.name}</strong> ({user?.email})
-                </div>
+                {user && (
+                  <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-500">
+                    Raportat ca: <strong className="text-slate-700">{user.name}</strong> ({user.email})
+                  </div>
+                )}
 
                 <div className="flex gap-3 pt-1">
                   <button
