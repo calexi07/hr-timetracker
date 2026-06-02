@@ -332,11 +332,13 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
     onMotivatieUpdate?.()
   }
 
-  const totalOre = rows.reduce((s, r) => {
+  // Calcul total — exclude weekenduri
+  const rowsWeekdays = rows.filter(r => !isWeekend(parseISO(r.date)))
+  const totalOre = rowsWeekdays.reduce((s, r) => {
     if (r.motivatie_status === 'aprobat' && r.motivatie_tip_aprobare !== 'cu_recuperare') return s + NORMA
     return s + Number(r.hours_worked)
   }, 0)
-  const totalNorma = rows.length * NORMA
+  const totalNorma = rowsWeekdays.length * NORMA
   const totalDiffMinute = Math.round((totalOre - totalNorma) * 60)
 
   const formatTotalDiff = (minute: number) => {
@@ -377,7 +379,6 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeModal} />
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 z-10">
 
-            {/* Header */}
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">
@@ -392,7 +393,6 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
               </button>
             </div>
 
-            {/* Info pontaj */}
             {modal.pontaj && (
               <div className="bg-slate-50 rounded-xl p-3 mb-4 text-xs text-slate-500 flex gap-4">
                 <span>Intrare: <strong className="text-slate-700">{formatTime(modal.pontaj.check_in)}</strong></span>
@@ -403,7 +403,6 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
 
             {modal.type === 'approve' ? (
               <>
-                {/* Motivatia angajatului — mereu vizibila */}
                 <div className="mb-4">
                   <p className="text-xs font-medium text-slate-500 mb-1.5">Motivatia angajatului</p>
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
@@ -413,7 +412,6 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
 
                 {modal.step === 'decizie' ? (
                   <>
-                    {/* Raspuns */}
                     <div className="mb-5">
                       <label className="block text-xs font-medium text-slate-500 mb-1.5">
                         Raspunsul tau <span className="text-slate-400 font-normal">(optional)</span>
@@ -428,21 +426,13 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                     </div>
 
                     <div className="flex gap-3">
-                      <button
-                        onClick={handleRespinge}
-                        disabled={saving}
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 font-medium text-sm transition-all disabled:opacity-50"
-                      >
-                        <XCircle size={16} />
-                        {saving ? '...' : 'Respinge'}
+                      <button onClick={handleRespinge} disabled={saving}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 font-medium text-sm transition-all disabled:opacity-50">
+                        <XCircle size={16} />{saving ? '...' : 'Respinge'}
                       </button>
-                      <button
-                        onClick={() => setModal(prev => ({ ...prev, step: 'tip_aprobare' }))}
-                        disabled={saving}
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-medium text-sm transition-all disabled:opacity-50"
-                      >
-                        <CheckCircle size={16} />
-                        Aproba
+                      <button onClick={() => setModal(prev => ({ ...prev, step: 'tip_aprobare' }))} disabled={saving}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-medium text-sm transition-all disabled:opacity-50">
+                        <CheckCircle size={16} />Aproba
                       </button>
                     </div>
                     <button onClick={closeModal} className="w-full mt-3 text-xs text-slate-400 hover:text-slate-600 py-1.5">
@@ -451,18 +441,14 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                   </>
                 ) : (
                   <>
-                    {/* Step 2: Tip aprobare */}
                     <div className="mb-5">
                       <p className="text-sm font-medium text-slate-700 mb-3">Ce se intampla cu timpul de recuperat?</p>
-
                       <div className="flex flex-col gap-3">
                         <button
                           onClick={() => setModal(prev => ({ ...prev, tipAprobare: 'fara_recuperare' }))}
                           className={cn(
                             'p-4 rounded-xl border-2 text-left transition-all',
-                            modal.tipAprobare === 'fara_recuperare'
-                              ? 'border-blue-500 bg-blue-50'
-                              : 'border-slate-200 bg-white hover:border-slate-300'
+                            modal.tipAprobare === 'fara_recuperare' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'
                           )}
                         >
                           <div className="flex items-center gap-3">
@@ -470,9 +456,7 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                               'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all',
                               modal.tipAprobare === 'fara_recuperare' ? 'border-blue-500 bg-blue-500' : 'border-slate-300'
                             )}>
-                              {modal.tipAprobare === 'fara_recuperare' && (
-                                <div className="w-2 h-2 rounded-full bg-white" />
-                              )}
+                              {modal.tipAprobare === 'fara_recuperare' && <div className="w-2 h-2 rounded-full bg-white" />}
                             </div>
                             <div>
                               <p className="text-sm font-semibold text-slate-900">Ziua devine {formatHours(NORMA)}</p>
@@ -485,9 +469,7 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                           onClick={() => setModal(prev => ({ ...prev, tipAprobare: 'cu_recuperare' }))}
                           className={cn(
                             'p-4 rounded-xl border-2 text-left transition-all',
-                            modal.tipAprobare === 'cu_recuperare'
-                              ? 'border-amber-500 bg-amber-50'
-                              : 'border-slate-200 bg-white hover:border-slate-300'
+                            modal.tipAprobare === 'cu_recuperare' ? 'border-amber-500 bg-amber-50' : 'border-slate-200 bg-white hover:border-slate-300'
                           )}
                         >
                           <div className="flex items-center gap-3">
@@ -495,9 +477,7 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                               'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all',
                               modal.tipAprobare === 'cu_recuperare' ? 'border-amber-500 bg-amber-500' : 'border-slate-300'
                             )}>
-                              {modal.tipAprobare === 'cu_recuperare' && (
-                                <div className="w-2 h-2 rounded-full bg-white" />
-                              )}
+                              {modal.tipAprobare === 'cu_recuperare' && <div className="w-2 h-2 rounded-full bg-white" />}
                             </div>
                             <div>
                               <p className="text-sm font-semibold text-slate-900">Se recupereaza intr-o alta zi</p>
@@ -509,20 +489,13 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                     </div>
 
                     <div className="flex gap-3">
-                      <button
-                        onClick={() => setModal(prev => ({ ...prev, step: 'decizie' }))}
-                        className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium text-sm transition-all"
-                      >
-                        <ChevronLeft size={16} />
-                        Inapoi
+                      <button onClick={() => setModal(prev => ({ ...prev, step: 'decizie' }))}
+                        className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium text-sm transition-all">
+                        <ChevronLeft size={16} />Inapoi
                       </button>
-                      <button
-                        onClick={handleAproba}
-                        disabled={saving}
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-medium text-sm transition-all disabled:opacity-50"
-                      >
-                        <CheckCircle size={16} />
-                        {saving ? 'Se salveaza...' : 'Confirma aprobarea'}
+                      <button onClick={handleAproba} disabled={saving}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-medium text-sm transition-all disabled:opacity-50">
+                        <CheckCircle size={16} />{saving ? 'Se salveaza...' : 'Confirma aprobarea'}
                       </button>
                     </div>
                   </>
@@ -585,7 +558,9 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                   <tr key={date} className="border-b border-red-100 bg-red-50/60">
                     <td className="px-4 py-2.5 font-medium text-red-400">{formatDate(date)}</td>
                     <td className="px-4 py-2.5 text-red-400 capitalize text-xs">{ziSaptamana}</td>
-                    <td colSpan={6} className="px-4 py-2.5 text-red-300 text-xs">Weekend</td>
+                    <td colSpan={6} className="px-4 py-2.5 text-red-300 text-xs">
+                      {pontaj ? `Weekend — ${formatHours(Number(pontaj.hours_worked))} (neinclus in calcule)` : 'Weekend'}
+                    </td>
                     <td className="px-4 py-2.5" />
                   </tr>
                 )
