@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
-import { LayoutDashboard, Clock, Users, Upload, LogOut, ChevronRight, Shield, FileText, UsersRound, CalendarDays } from 'lucide-react'
+import { LayoutDashboard, Clock, Users, Upload, LogOut, ChevronRight, Shield, FileText, UsersRound, CalendarDays, AlertCircle } from 'lucide-react'
 import { useUser } from '@/components/UserContext'
 import NotificariDropdown from '@/components/NotificariDropdown'
 import LanguageSwitcher from '@/components/LanguageSwitcher'
@@ -74,6 +74,13 @@ export default function Sidebar() {
       show: role === 'admin',
       comingSoon: false
     },
+    {
+      label: 'Rapoarte probleme',
+      href: '/admin/rapoarte',
+      icon: <AlertCircle size={18} />,
+      show: role === 'admin',
+      comingSoon: false
+    },
   ].filter(n => n.show)
 
   const initials = user?.name?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || '?'
@@ -99,8 +106,7 @@ export default function Sidebar() {
 
           if (item.comingSoon) {
             return (
-              <div
-                key={item.href}
+              <div key={item.href}
                 className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-blue-400 cursor-not-allowed opacity-70"
               >
                 <span className="text-blue-500">{item.icon}</span>
@@ -135,8 +141,7 @@ export default function Sidebar() {
 
       <div className="mx-4 border-t border-blue-700/50" />
 
-      {/* Profil + Language + Deconectare */}
-      <div className="p-4 mt-auto shrink-0 space-y-1">
+      <div className="p-4 shrink-0 space-y-1">
         <Link
           href="/profile"
           className={cn(
@@ -158,7 +163,6 @@ export default function Sidebar() {
           <ChevronRight size={13} className="text-blue-400 group-hover:text-blue-200 shrink-0" />
         </Link>
 
-        {/* Language Switcher */}
         <LanguageSwitcher />
 
         <button
