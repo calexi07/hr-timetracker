@@ -50,9 +50,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <TermsGuard>
             {children}
           </TermsGuard>
+          <RaportProblema />
+          <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
         </UserProvider>
-<RaportProblema />
-<Toaster position="top-right" toastOptions={{ duration: 3000 }} />
       </body>
     </html>
   )
