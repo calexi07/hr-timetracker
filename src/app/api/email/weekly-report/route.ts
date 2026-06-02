@@ -14,8 +14,8 @@ async function sendEmailResend(to: string, subject: string, html: string) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: 'Pontaj HR <noreply@it.assetflow.app>',
-    to: ['cristian.alexiu@krka.biz'],
+      from: 'Pontaj HR <no-reply@itassetflow.app>',
+      to: [to],
       subject,
       html,
     }),
