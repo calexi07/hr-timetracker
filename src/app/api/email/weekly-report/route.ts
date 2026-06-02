@@ -11,14 +11,12 @@ const supabase = createClient(
 
 export async function GET(request: Request) {
   try {
-    // Verifica secret pentru securitate
     const { searchParams } = new URL(request.url)
     const secret = searchParams.get('secret')
     if (secret !== process.env.CRON_SECRET) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Ia toti managerii si directorii
     const { data: manageri } = await supabase
       .from('app_users')
       .select('id, name, email, role')
@@ -31,7 +29,6 @@ export async function GET(request: Request) {
     const results = []
 
     for (const manager of manageri) {
-      // Ia notificarile nerezolvate pentru acest manager
       const { data: notificari } = await supabase
         .from('notificari')
         .select('*')
@@ -41,27 +38,18 @@ export async function GET(request: Request) {
 
       if (!notificari || notificari.length === 0) continue
 
-      // Grupeaza pe angajat
-      const peAngajat: Record<string, { name: string; count: number; zile: string[] }> = {}
+      const peAngajat: Record<string, { name: string; count: number }> = {}
       for (const n of notificari) {
         if (!peAngajat[n.angajat_id]) {
-          peAngajat[n.angajat_id] = {
-            name: n.angajat_name,
-            count: 0,
-            zile: []
-          }
+          peAngajat[n.angajat_id] = { name: n.angajat_name, count: 0 }
         }
         peAngajat[n.angajat_id].count++
-        if (n.date_referinta) {
-          peAngajat[n.angajat_id].zile.push(n.date_referinta)
-        }
       }
 
       const listaAngajati = Object.values(peAngajat)
       const totalMotivatie = notificari.length
       const firstName = manager.name?.split(' ')[0] || manager.name
 
-      // Construieste HTML email
       const listaRO = listaAngajati.map(a =>
         `<li style="margin-bottom:8px;"><strong>${a.name}</strong> — ${a.count} motivatie${a.count > 1 ? 'i' : ''} in asteptare</li>`
       ).join('')
@@ -91,9 +79,10 @@ export async function GET(request: Request) {
                   <td>
                     <p style="margin:0;color:#bfdbfe;font-size:13px;font-weight:500;letter-spacing:1px;text-transform:uppercase;">Pontaj HR · Krka Romania</p>
                     <h1 style="margin:8px 0 0;color:white;font-size:24px;font-weight:700;">Raport Saptamanal</h1>
+                    <p style="margin:8px 0 0;color:#bfdbfe;font-size:13px;">Pentru: ${manager.name}</p>
                   </td>
                   <td align="right">
-                    <div style="background:rgba(255,255,255,0.15);border-radius:12px;padding:12px 16px;display:inline-block;">
+                    <div style="background:rgba(255,255,255,0.15);border-radius:12px;padding:12px 16px;text-align:center;">
                       <p style="margin:0;color:white;font-size:28px;font-weight:800;">${totalMotivatie}</p>
                       <p style="margin:4px 0 0;color:#bfdbfe;font-size:11px;">in asteptare</p>
                     </div>
@@ -109,7 +98,7 @@ export async function GET(request: Request) {
               <p style="margin:0 0 4px;color:#6b7280;font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">🇷🇴 Română</p>
               <h2 style="margin:0 0 16px;color:#0f172a;font-size:18px;font-weight:600;">Buna ziua, ${firstName}!</h2>
               <p style="margin:0 0 16px;color:#475569;font-size:15px;line-height:1.6;">
-                Ai <strong style="color:#1e3a8a;">${totalMotivatie} motivatie${totalMotivatie > 1 ? 'i' : ''}</strong> in asteptare de la membrii echipei tale. 
+                Ai <strong style="color:#1e3a8a;">${totalMotivatie} motivatie${totalMotivatie > 1 ? 'i' : ''}</strong> in asteptare de la membrii echipei tale.
                 Te rugam sa le analizezi si sa le aprobi sau respingi cat mai curand.
               </p>
               
@@ -145,7 +134,7 @@ export async function GET(request: Request) {
               <p style="margin:0 0 4px;color:#6b7280;font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;">🇬🇧 English</p>
               <h2 style="margin:0 0 16px;color:#0f172a;font-size:18px;font-weight:600;">Good morning, ${firstName}!</h2>
               <p style="margin:0 0 16px;color:#475569;font-size:15px;line-height:1.6;">
-                You have <strong style="color:#1e3a8a;">${totalMotivatie} pending justification${totalMotivatie > 1 ? 's' : ''}</strong> from your team members. 
+                You have <strong style="color:#1e3a8a;">${totalMotivatie} pending justification${totalMotivatie > 1 ? 's' : ''}</strong> from your team members.
                 Please review and approve or reject them as soon as possible.
               </p>
               
@@ -172,8 +161,8 @@ export async function GET(request: Request) {
           <tr>
             <td style="background:#f8fafc;padding:20px 40px;border-top:1px solid #e2e8f0;">
               <p style="margin:0;color:#94a3b8;font-size:12px;text-align:center;">
-                Pontaj HR · Krka Romania · Trimis automat in fiecare luni la 10:00
-                <br>Acest email este generat automat. Nu raspunde la acest mesaj.
+                Pontaj HR · Krka Romania · Trimis automat in fiecare luni la 10:00<br>
+                Acest email este generat automat. Nu raspunde la acest mesaj.
               </p>
             </td>
           </tr>
@@ -186,11 +175,10 @@ export async function GET(request: Request) {
 </html>
       `
 
-      // Trimite emailul
       const { data: emailData, error: emailError } = await resend.emails.send({
         from: 'Pontaj HR <onboarding@resend.dev>',
-        to: [manager.email],
-        subject: `📋 ${totalMotivatie} motivatie${totalMotivatie > 1 ? 'i' : ''} in asteptare — Raport Saptamanal Pontaj HR`,
+        to: ['cristianstefan.alexiu@gmail.com'], // TEST — schimba cu manager.email dupa verificarea domeniului
+        subject: `📋 [${manager.name}] ${totalMotivatie} motivatie${totalMotivatie > 1 ? 'i' : ''} in asteptare — Raport Saptamanal`,
         html: htmlEmail,
       })
 
