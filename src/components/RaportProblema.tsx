@@ -82,9 +82,12 @@ export default function RaportProblema() {
     setTrimis(false)
   }
 
-  return (
-    <>
-      {/* Bubble button */}
+// Nu afisa butonul daca userul nu e logat
+if (!user) return null
+
+return (
+  <>
+    {/* Bubble button */}
       <button
         onClick={() => setOpen(true)}
         className={cn(
