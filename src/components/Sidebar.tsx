@@ -51,7 +51,7 @@ export default function Sidebar() {
       href: '/concedii',
       icon: <CalendarDays size={18} />,
       show: true,
-      comingSoon: true
+      comingSoon: false
     },
     {
       label: 'Incarca date',

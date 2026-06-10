@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { parseTimesheetExcel } from '@/lib/excel-parser'
+import { requireAdmin } from '@/lib/auth-guard'
 
 export async function POST(req: NextRequest) {
+  const guard = await requireAdmin()
+  if (!guard.ok) return guard.response
+
   const supabase = createAdminClient()
 
   const formData = await req.formData()
