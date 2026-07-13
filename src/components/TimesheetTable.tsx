@@ -142,10 +142,11 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
   }))
 
   const getMotivatieForRow = (date: string, pontaj: any) => {
-    const text = pontaj?.motivatie || observatiiZile[date]?.observatie || null
-    const status = pontaj?.motivatie_status || observatiiZile[date]?.motivatie_status || null
-    const raspuns = pontaj?.motivatie_raspuns || observatiiZile[date]?.motivatie_raspuns || null
-    const tipAprobare = pontaj?.motivatie_tip_aprobare || observatiiZile[date]?.motivatie_tip_aprobare || null
+    const obsZi = observatiiZile[date]
+    const text = pontaj?.motivatie || obsZi?.observatie || null
+    const status = pontaj?.motivatie_status || obsZi?.motivatie_status || null
+    const raspuns = pontaj?.motivatie_raspuns || obsZi?.motivatie_raspuns || null
+    const tipAprobare = pontaj?.motivatie_tip_aprobare || obsZi?.motivatie_tip_aprobare || null
     return { text, status, raspuns, tipAprobare }
   }
 
@@ -332,10 +333,13 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
     onMotivatieUpdate?.()
   }
 
-  // Calcul total — exclude weekenduri
+  // Calcul total — exclude weekenduri, include aprobari din observatii_zile
   const rowsWeekdays = rows.filter(r => !isWeekend(parseISO(r.date)))
   const totalOre = rowsWeekdays.reduce((s, r) => {
-    if (r.motivatie_status === 'aprobat' && r.motivatie_tip_aprobare !== 'cu_recuperare') return s + NORMA
+    const obsZi = observatiiZile[r.date]
+    const motivatieStatus = r.motivatie_status || obsZi?.motivatie_status || null
+    const tipAprobare = r.motivatie_tip_aprobare || obsZi?.motivatie_tip_aprobare || null
+    if (motivatieStatus === 'aprobat' && tipAprobare !== 'cu_recuperare') return s + NORMA
     return s + Number(r.hours_worked)
   }, 0)
   const totalNorma = rowsWeekdays.length * NORMA
@@ -373,12 +377,10 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
 
   return (
     <div>
-      {/* Modal */}
       {modal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeModal} />
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 z-10">
-
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">
@@ -424,7 +426,6 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                         className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
                       />
                     </div>
-
                     <div className="flex gap-3">
                       <button onClick={handleRespinge} disabled={saving}
                         className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 font-medium text-sm transition-all disabled:opacity-50">
@@ -487,7 +488,6 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                         </button>
                       </div>
                     </div>
-
                     <div className="flex gap-3">
                       <button onClick={() => setModal(prev => ({ ...prev, step: 'decizie' }))}
                         className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium text-sm transition-all">
