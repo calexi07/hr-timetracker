@@ -4,7 +4,6 @@ import './globals.css'
 import { UserProvider } from '@/components/UserContext'
 import TermsGuard from '@/components/TermsGuard'
 import { Toaster } from 'react-hot-toast'
-import RaportProblema from '@/components/RaportProblema'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -50,9 +49,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <TermsGuard>
             {children}
           </TermsGuard>
-          <RaportProblema />
-          <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
         </UserProvider>
+        <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
       </body>
     </html>
   )

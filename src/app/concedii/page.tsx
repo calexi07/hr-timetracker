@@ -3,9 +3,8 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
-import { format } from 'date-fns'
+import { format, differenceInBusinessDays, addDays } from 'date-fns'
 import { ro } from 'date-fns/locale'
-import { zileLucratoare } from '@/lib/sarbatori'
 import { CalendarDays, Plus, X, Upload, FileText, Clock, CheckCircle, XCircle, Eye, Trash2 } from 'lucide-react'
 import Sidebar from '@/components/Sidebar'
 import toast from 'react-hot-toast'
@@ -89,8 +88,13 @@ export default function ConcediiPage() {
     setCereri(data || [])
   }
 
-  // Zile lucratoare excluzand weekendurile si sarbatorile legale RO
-  const calcZileLucratoare = (start: string, end: string) => zileLucratoare(start, end)
+  const calcZileLucratoare = (start: string, end: string) => {
+    if (!start || !end) return 0
+    const s = new Date(start)
+    const e = new Date(end)
+    if (e < s) return 0
+    return differenceInBusinessDays(addDays(e, 1), s)
+  }
 
   const resetForm = () => {
     setTip('odihna')
@@ -128,22 +132,6 @@ export default function ConcediiPage() {
 
     setSubmitting(true)
 
-    // Verifica suprapunerea cu alte cereri active
-    const { data: suprapuse } = await supabase
-      .from('cereri_concediu')
-      .select('id')
-      .eq('angajat_id', appUser.id)
-      .in('status', ['in_asteptare', 'aprobat'])
-      .lte('data_start', dataSfarsit)
-      .gte('data_sfarsit', dataStart)
-      .limit(1)
-
-    if (suprapuse && suprapuse.length > 0) {
-      toast.error('Ai deja o cerere activa care se suprapune cu aceasta perioada')
-      setSubmitting(false)
-      return
-    }
-
     let documentUrl = null
     let documentName = null
 
@@ -170,7 +158,7 @@ export default function ConcediiPage() {
 
     console.log('Submitting cerere:', { currentTip, statusFinal, isMedical })
 
-    const { data: inserted, error } = await supabase
+    const { error } = await supabase
       .from('cereri_concediu')
       .insert({
         angajat_id: appUser.id,
@@ -186,22 +174,11 @@ export default function ConcediiPage() {
         manager_decis_la: isMedical ? new Date().toISOString() : null,
         manager_raspuns: isMedical ? 'Aprobat automat' : null,
       })
-      .select('id')
-      .single()
 
     if (error) {
       toast.error('Eroare: ' + error.message)
       setSubmitting(false)
       return
-    }
-
-    // Notifica managerul pe email (fire-and-forget)
-    if (inserted?.id) {
-      fetch('/api/email/cerere-noua', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cerereId: inserted.id }),
-      }).catch(() => {})
     }
 
     toast.success(
