@@ -141,7 +141,11 @@ export default function TeamPage() {
       }
 
       // Filtreaza weekendurile
-      const rows = (tsData || []).filter((r: any) => !isWeekend(parseISO(r.date)))
+   const rows = (tsData || []).filter((r: any) => {
+  const d = new Date(r.date)
+  const dow = d.getDay() // 0=Duminica, 6=Sambata
+  return dow !== 0 && dow !== 6
+})
 
       const totalOre = rows.reduce((s: number, r: any) => {
         const obs = obsMap[r.date]
