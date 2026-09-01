@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatHours, cn } from '@/lib/utils'
-import { format, startOfMonth, isWeekend, parseISO } from 'date-fns'
+import { format, startOfMonth } from 'date-fns'
 import { ArrowLeft, Users, AlertTriangle, CheckCircle2, ChevronRight } from 'lucide-react'
 import DateFilter from '@/components/DateFilter'
 import TimesheetTable from '@/components/TimesheetTable'
@@ -56,7 +56,6 @@ export default function TeamPage() {
 
       setCurrentUser(u)
 
-      // Incarca zilele exceptate
       const { data: zileEx } = await supabase
         .from('zile_exceptate')
         .select('data_start, data_sfarsit')
@@ -118,11 +117,18 @@ export default function TeamPage() {
     return zileEx.some((z: any) => date >= z.data_start && date <= z.data_sfarsit)
   }
 
+  const trebuieInclusa = (date: string, hoursWorked: number, zileEx: any[]) => {
+    const d = new Date(date)
+    const dow = d.getDay()
+    if (dow === 0 || dow === 6) return false
+    // Daca are pontaj real (>0.5 ore), include ziua chiar daca e exceptata
+    if (Number(hoursWorked) > 0.5 && esteZiExceptata(date, zileEx)) return true
+    return !esteZiExceptata(date, zileEx)
+  }
+
   const loadSummaries = async (members: any[], f: string, t: string, zileEx?: any[]) => {
     setLoadingSummaries(true)
     const results: MemberSummary[] = []
-
-    // Foloseste zilele exceptate din parametru sau din state
     const zileExCurent = zileEx !== undefined ? zileEx : zileExceptate
 
     for (const member of members) {
@@ -152,13 +158,9 @@ export default function TeamPage() {
         obsMap[obs.date] = obs
       }
 
-      // Filtreaza weekendurile SI zilele exceptate
-      const rows = (tsData || []).filter((r: any) => {
-        const d = new Date(r.date)
-        const dow = d.getDay()
-        if (dow === 0 || dow === 6) return false
-        return !esteZiExceptata(r.date, zileExCurent)
-      })
+      const rows = (tsData || []).filter((r: any) =>
+        trebuieInclusa(r.date, r.hours_worked, zileExCurent)
+      )
 
       const totalOre = rows.reduce((s: number, r: any) => {
         const obs = obsMap[r.date]
@@ -256,13 +258,10 @@ export default function TeamPage() {
 
   const selectedNorma = selected?.norma_ore ?? DEFAULT_NORMA
 
-  // Calcul total pentru angajatul selectat — exclude weekenduri si zile exceptate
-  const timesheetsWeekdays = timesheets.filter(r => {
-    const d = new Date(r.date)
-    const dow = d.getDay()
-    if (dow === 0 || dow === 6) return false
-    return !esteZiExceptata(r.date, zileExceptate)
-  })
+  // Calcul total pentru angajatul selectat
+  const timesheetsWeekdays = timesheets.filter(r =>
+    trebuieInclusa(r.date, r.hours_worked, zileExceptate)
+  )
 
   const totalHours = timesheetsWeekdays.reduce((s, r) => {
     if (r.motivatie_status === 'aprobat' && r.motivatie_tip_aprobare !== 'cu_recuperare') return s + selectedNorma
@@ -658,6 +657,7 @@ export default function TeamPage() {
                     normaZi={selectedNorma}
                     isManager={true}
                     onMotivatieUpdate={handleMotivatieUpdate}
+                    zileExceptate={zileExceptate}
                   />
                 </div>
               </>
