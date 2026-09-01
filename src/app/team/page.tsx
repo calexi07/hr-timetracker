@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatHours, cn } from '@/lib/utils'
-import { format, startOfMonth } from 'date-fns'
+import { format, startOfMonth, isWeekend, parseISO } from 'date-fns'
 import { ArrowLeft, Users, AlertTriangle, CheckCircle2, ChevronRight } from 'lucide-react'
 import DateFilter from '@/components/DateFilter'
 import TimesheetTable from '@/components/TimesheetTable'
@@ -116,19 +116,41 @@ export default function TeamPage() {
         results.push({ member, totalOre: 0, zile: 0, norma: 0, diffMin: 0 })
         continue
       }
-      const { data } = await supabase
+
+      const normaZi = member.norma_ore ?? DEFAULT_NORMA
+
+      // Ia timesheets
+      const { data: tsData } = await supabase
         .from('timesheets')
-        .select('hours_worked, motivatie_status')
+        .select('date, hours_worked, motivatie_status, motivatie_tip_aprobare')
         .eq('employee_id', Number(member.employee_id))
         .gte('date', f)
         .lte('date', t)
 
-      const rows = data || []
-      const normaZi = member.norma_ore ?? DEFAULT_NORMA
+      // Ia observatii_zile pentru aprobari suplimentare
+      const { data: obsData } = await supabase
+        .from('observatii_zile')
+        .select('date, motivatie_status, motivatie_tip_aprobare')
+        .eq('employee_id', Number(member.employee_id))
+        .gte('date', f)
+        .lte('date', t)
+
+      const obsMap: Record<string, any> = {}
+      for (const obs of obsData || []) {
+        obsMap[obs.date] = obs
+      }
+
+      // Filtreaza weekendurile
+      const rows = (tsData || []).filter((r: any) => !isWeekend(parseISO(r.date)))
+
       const totalOre = rows.reduce((s: number, r: any) => {
-        if (r.motivatie_status === 'aprobat') return s + normaZi
+        const obs = obsMap[r.date]
+        const motivatieStatus = r.motivatie_status || obs?.motivatie_status || null
+        const tipAprobare = r.motivatie_tip_aprobare || obs?.motivatie_tip_aprobare || null
+        if (motivatieStatus === 'aprobat' && tipAprobare !== 'cu_recuperare') return s + normaZi
         return s + Number(r.hours_worked)
       }, 0)
+
       const zile = rows.length
       const norma = zile * normaZi
       const diffMin = Math.round((totalOre - norma) * 60)
@@ -216,11 +238,14 @@ export default function TeamPage() {
   }
 
   const selectedNorma = selected?.norma_ore ?? DEFAULT_NORMA
-  const totalHours = timesheets.reduce((s, r) => {
-    if (r.motivatie_status === 'aprobat') return s + selectedNorma
+
+  // Calcul total pentru angajatul selectat — exclude weekenduri
+  const timesheetsWeekdays = timesheets.filter(r => !isWeekend(parseISO(r.date)))
+  const totalHours = timesheetsWeekdays.reduce((s, r) => {
+    if (r.motivatie_status === 'aprobat' && r.motivatie_tip_aprobare !== 'cu_recuperare') return s + selectedNorma
     return s + Number(r.hours_worked)
   }, 0)
-  const totalNorma = timesheets.length * selectedNorma
+  const totalNorma = timesheetsWeekdays.length * selectedNorma
   const totalDiffMin = Math.round((totalHours - totalNorma) * 60)
 
   const allSummaries = summaries
@@ -566,7 +591,7 @@ export default function TeamPage() {
                   </div>
                   <div className="card p-5 bg-purple-50 border-purple-100">
                     <p className="text-slate-500 text-xs font-medium mb-1">Zile lucrate</p>
-                    <p className="text-2xl font-bold text-purple-700">{timesheets.length}</p>
+                    <p className="text-2xl font-bold text-purple-700">{timesheetsWeekdays.length}</p>
                   </div>
                   <div className="card p-5 bg-slate-50 border-slate-100">
                     <p className="text-slate-500 text-xs font-medium mb-1">Norma perioada</p>
@@ -593,13 +618,13 @@ export default function TeamPage() {
 
                 <div className="card p-6 mb-8">
                   <h2 className="text-base font-semibold text-slate-900 mb-4">Ore zilnice</h2>
-                  <HoursChart timesheets={timesheets} />
+                  <HoursChart timesheets={timesheetsWeekdays} />
                 </div>
 
                 <div className="card p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-base font-semibold text-slate-900">Detalii pontaj</h2>
-                    <span className="text-xs text-slate-400">{timesheets.length} inregistrari</span>
+                    <span className="text-xs text-slate-400">{timesheetsWeekdays.length} inregistrari</span>
                   </div>
                   <TimesheetTable
                     timesheets={timesheets}
