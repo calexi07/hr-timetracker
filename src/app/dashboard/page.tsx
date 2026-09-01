@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatHours, cn } from '@/lib/utils'
 import { Clock, Calendar, TrendingUp, Award, AlertTriangle } from 'lucide-react'
-import { format, startOfWeek, endOfWeek } from 'date-fns'
+import { format, startOfWeek, endOfWeek, parseISO } from 'date-fns'
 import TimesheetTable from '@/components/TimesheetTable'
 import DateFilter from '@/components/DateFilter'
 import HoursChart from '@/components/charts/HoursChart'
@@ -19,6 +19,7 @@ export default function DashboardPage() {
   const supabase = createClient()
   const [appUser, setAppUser] = useState<any>(null)
   const [timesheets, setTimesheets] = useState<any[]>([])
+  const [zileExceptate, setZileExceptate] = useState<{ data_start: string; data_sfarsit: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [from, setFrom] = useState(getWeekStart())
   const [to, setTo] = useState(getWeekEnd())
@@ -39,6 +40,12 @@ export default function DashboardPage() {
       if (u.role === 'hr') { router.push('/concedii'); return }
 
       setAppUser(u)
+
+      // Incarca zilele exceptate
+      const { data: zileEx } = await supabase
+        .from('zile_exceptate')
+        .select('data_start, data_sfarsit')
+      setZileExceptate(zileEx || [])
 
       if (u.employee_id) {
         const currentFrom = getWeekStart()
@@ -114,18 +121,32 @@ export default function DashboardPage() {
 
   const normaZi = appUser?.norma_ore ?? 8.25
 
-  const totalHours = timesheets.reduce((s, r) => {
-    if (r.motivatie_status === 'aprobat') return s + normaZi
+  const esteZiExceptata = (date: string) => {
+    return zileExceptate.some(z => date >= z.data_start && date <= z.data_sfarsit)
+  }
+
+  const trebuieInclusa = (date: string, hoursWorked: number) => {
+    const d = new Date(date)
+    const dow = d.getDay()
+    if (dow === 0 || dow === 6) return false
+    if (Number(hoursWorked) > 0.5 && esteZiExceptata(date)) return true
+    return !esteZiExceptata(date)
+  }
+
+  const timesheetsWeekdays = timesheets.filter(r => trebuieInclusa(r.date, r.hours_worked))
+
+  const totalHours = timesheetsWeekdays.reduce((s, r) => {
+    if (r.motivatie_status === 'aprobat' && r.motivatie_tip_aprobare !== 'cu_recuperare') return s + normaZi
     return s + Number(r.hours_worked)
   }, 0)
 
-  const daysWorked = timesheets.length
-  const maxDay = timesheets.reduce((best, r) => Number(r.hours_worked) > best ? Number(r.hours_worked) : best, 0)
+  const daysWorked = timesheetsWeekdays.length
+  const maxDay = timesheetsWeekdays.reduce((best, r) => Number(r.hours_worked) > best ? Number(r.hours_worked) : best, 0)
   const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd')
-  const weekHours = timesheets
+  const weekHours = timesheetsWeekdays
     .filter(r => r.date >= weekStart)
     .reduce((s, r) => {
-      if (r.motivatie_status === 'aprobat') return s + normaZi
+      if (r.motivatie_status === 'aprobat' && r.motivatie_tip_aprobare !== 'cu_recuperare') return s + normaZi
       return s + Number(r.hours_worked)
     }, 0)
   const totalNorma = daysWorked * normaZi
@@ -256,7 +277,7 @@ export default function DashboardPage() {
 
             <div className="card p-6 mb-8">
               <h2 className="text-base font-semibold text-slate-900 mb-4">Ore zilnice</h2>
-              <HoursChart timesheets={timesheets} />
+              <HoursChart timesheets={timesheetsWeekdays} />
             </div>
 
             <div className="card p-6">
@@ -266,7 +287,7 @@ export default function DashboardPage() {
                   <span className="text-xs text-slate-400">
                     Norma: {formatHours(normaZi)}/zi
                   </span>
-                  <span className="text-xs text-slate-400">{timesheets.length} inregistrari</span>
+                  <span className="text-xs text-slate-400">{timesheetsWeekdays.length} inregistrari</span>
                 </div>
               </div>
               <TimesheetTable
@@ -276,6 +297,7 @@ export default function DashboardPage() {
                 employeeId={Number(appUser.employee_id)}
                 normaZi={normaZi}
                 onMotivatieUpdate={handleMotivatieUpdate}
+                zileExceptate={zileExceptate}
               />
             </div>
           </>
