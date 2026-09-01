@@ -75,9 +75,10 @@ interface Props {
   normaZi?: number
   isManager?: boolean
   onMotivatieUpdate?: () => void
+  zileExceptate?: { data_start: string; data_sfarsit: string }[]
 }
 
-export default function TimesheetTable({ timesheets, readonly = false, from, to, employeeId, normaZi, isManager = false, onMotivatieUpdate }: Props) {
+export default function TimesheetTable({ timesheets, readonly = false, from, to, employeeId, normaZi, isManager = false, onMotivatieUpdate, zileExceptate = [] }: Props) {
   const supabase = createClient()
   const user = useUser()
   const [rows, setRows] = useState(timesheets)
@@ -120,6 +121,19 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
     load()
   }, [empId, from, to])
 
+  const esteZiExceptata = (date: string) => {
+    return zileExceptate.some(z => date >= z.data_start && date <= z.data_sfarsit)
+  }
+
+  const trebuieInclusa = (date: string, hoursWorked: number) => {
+    const d = new Date(date)
+    const dow = d.getDay()
+    if (dow === 0 || dow === 6) return false
+    // Daca are pontaj real (>0.5 ore), include ziua chiar daca e exceptata
+    if (Number(hoursWorked) > 0.5 && esteZiExceptata(date)) return true
+    return !esteZiExceptata(date)
+  }
+
   const allDays = from && to ? eachDayOfInterval({
     start: parseISO(from),
     end: parseISO(to)
@@ -132,13 +146,15 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
     const pontaj = pontajMap.get(dateStr)
     const weekend = isWeekend(day)
     const ziSaptamana = format(day, 'EEEE', { locale: ro })
-    return { date: dateStr, day, pontaj, weekend, ziSaptamana }
+    const exceptata = !weekend && esteZiExceptata(dateStr) && !(pontaj && Number(pontaj.hours_worked) > 0.5)
+    return { date: dateStr, day, pontaj, weekend, ziSaptamana, exceptata }
   }) : rows.map(r => ({
     date: r.date,
     day: parseISO(r.date),
     pontaj: r,
     weekend: isWeekend(parseISO(r.date)),
-    ziSaptamana: format(parseISO(r.date), 'EEEE', { locale: ro })
+    ziSaptamana: format(parseISO(r.date), 'EEEE', { locale: ro }),
+    exceptata: false
   }))
 
   const getMotivatieForRow = (date: string, pontaj: any) => {
@@ -167,20 +183,16 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
   const trimiteNotificare = async (date: string, motivatieText: string, timesheetId?: string, observatieId?: string) => {
     const { data: { user: authUser } } = await supabase.auth.getUser()
     if (!authUser) return
-
     const { data: angajat } = await supabase
       .from('app_users')
       .select('manager_id, name')
       .eq('id', authUser.id)
       .single()
-
     if (!angajat?.manager_id) return
-
     await supabase.from('notificari').delete()
       .eq('destinatar_id', angajat.manager_id)
       .eq('angajat_id', authUser.id)
       .eq('date_referinta', date)
-
     await supabase.from('notificari').insert({
       destinatar_id: angajat.manager_id,
       tip: 'motivatie_noua',
@@ -199,7 +211,6 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
   const handleSaveMotivatie = async () => {
     if (!modal.date) return
     setSaving(true)
-
     if (modal.pontaj) {
       const { error } = await supabase
         .from('timesheets')
@@ -212,21 +223,17 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
           motivatie_tip_aprobare: null,
         })
         .eq('id', modal.pontaj.id)
-
       if (error) { toast.error('Eroare: ' + error.message); setSaving(false); return }
-
       setRows(prev => prev.map(r =>
         r.id === modal.pontaj.id
           ? { ...r, motivatie: modal.motivatie.trim() || null, motivatie_status: modal.motivatie.trim() ? 'in_asteptare' : null, motivatie_aprobata_de: null, motivatie_aprobata_la: null, motivatie_raspuns: null, motivatie_tip_aprobare: null }
           : r
       ))
-
       if (modal.motivatie.trim()) {
         await trimiteNotificare(modal.date, modal.motivatie.trim(), modal.pontaj.id, undefined)
       }
     } else {
       if (!empId) { toast.error('ID angajat lipsa'); setSaving(false); return }
-
       if (modal.motivatie.trim()) {
         const { data: obsData, error } = await supabase
           .from('observatii_zile')
@@ -242,21 +249,17 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
           }, { onConflict: 'employee_id,date' })
           .select()
           .single()
-
         if (error) { toast.error('Eroare: ' + error.message); setSaving(false); return }
-
         setObservatiiZile(prev => ({
           ...prev,
           [modal.date]: { ...prev[modal.date], observatie: modal.motivatie.trim(), motivatie_status: 'in_asteptare', motivatie_raspuns: null, motivatie_tip_aprobare: null }
         }))
-
         await trimiteNotificare(modal.date, modal.motivatie.trim(), undefined, obsData?.id)
       } else {
         await supabase.from('observatii_zile').delete().eq('employee_id', empId).eq('date', modal.date)
         setObservatiiZile(prev => { const next = { ...prev }; delete next[modal.date]; return next })
       }
     }
-
     toast.success('Motivatie salvata')
     closeModal()
     setSaving(false)
@@ -266,7 +269,6 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
   const handleRespinge = async () => {
     if (!modal.date) return
     setSaving(true)
-
     const { data: { user: authUser } } = await supabase.auth.getUser()
     const updateData = {
       motivatie_status: 'respins',
@@ -275,7 +277,6 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
       motivatie_raspuns: modal.raspuns.trim() || null,
       motivatie_tip_aprobare: null,
     }
-
     if (modal.pontaj) {
       const { error } = await supabase.from('timesheets').update(updateData).eq('id', modal.pontaj.id)
       if (error) { toast.error('Eroare: ' + error.message); setSaving(false); return }
@@ -287,9 +288,7 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
         setObservatiiZile(prev => ({ ...prev, [modal.date]: { ...prev[modal.date], ...updateData } }))
       }
     }
-
     await supabase.from('notificari').update({ rezolvata: true, citita: true }).eq('date_referinta', modal.date).eq('rezolvata', false)
-
     toast.success('Motivatie respinsa')
     closeModal()
     setSaving(false)
@@ -299,7 +298,6 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
   const handleAproba = async () => {
     if (!modal.date) return
     setSaving(true)
-
     const { data: { user: authUser } } = await supabase.auth.getUser()
     const updateData = {
       motivatie_status: 'aprobat',
@@ -308,7 +306,6 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
       motivatie_raspuns: modal.raspuns.trim() || null,
       motivatie_tip_aprobare: modal.tipAprobare,
     }
-
     if (modal.pontaj) {
       const { error } = await supabase.from('timesheets').update(updateData).eq('id', modal.pontaj.id)
       if (error) { toast.error('Eroare: ' + error.message); setSaving(false); return }
@@ -320,9 +317,7 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
         setObservatiiZile(prev => ({ ...prev, [modal.date]: { ...prev[modal.date], ...updateData } }))
       }
     }
-
     await supabase.from('notificari').update({ rezolvata: true, citita: true }).eq('date_referinta', modal.date).eq('rezolvata', false)
-
     toast.success(
       modal.tipAprobare === 'fara_recuperare'
         ? 'Motivatie aprobata — ziua devine ' + formatHours(NORMA)
@@ -333,8 +328,9 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
     onMotivatieUpdate?.()
   }
 
-  // Calcul total — exclude weekenduri, include aprobari din observatii_zile
-  const rowsWeekdays = rows.filter(r => !isWeekend(parseISO(r.date)))
+  // Calcul total — exclude weekenduri si zile exceptate (dar include zilele cu pontaj real)
+  const rowsWeekdays = rows.filter(r => trebuieInclusa(r.date, r.hours_worked))
+
   const totalOre = rowsWeekdays.reduce((s, r) => {
     const obsZi = observatiiZile[r.date]
     const motivatieStatus = r.motivatie_status || obsZi?.motivatie_status || null
@@ -356,7 +352,7 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
 
   const handleExport = () => {
     downloadCSV(
-      tableRows.filter(r => !r.weekend).map(({ date, pontaj, ziSaptamana }) => {
+      tableRows.filter(r => !r.weekend && !r.exceptata).map(({ date, pontaj, ziSaptamana }) => {
         const { text: motivatieText, status: motivatieStatus, raspuns, tipAprobare } = getMotivatieForRow(date, pontaj)
         const oreEfective = pontaj && motivatieStatus === 'aprobat' && tipAprobare !== 'cu_recuperare' ? NORMA : Number(pontaj?.hours_worked || 0)
         const diff = pontaj ? Math.round((oreEfective - NORMA) * 60) : 0
@@ -411,7 +407,6 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                     <p className="text-sm text-slate-700 italic">{modal.motivatie || '—'}</p>
                   </div>
                 </div>
-
                 {modal.step === 'decizie' ? (
                   <>
                     <div className="mb-5">
@@ -447,14 +442,12 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                       <div className="flex flex-col gap-3">
                         <button
                           onClick={() => setModal(prev => ({ ...prev, tipAprobare: 'fara_recuperare' }))}
-                          className={cn(
-                            'p-4 rounded-xl border-2 text-left transition-all',
+                          className={cn('p-4 rounded-xl border-2 text-left transition-all',
                             modal.tipAprobare === 'fara_recuperare' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'
                           )}
                         >
                           <div className="flex items-center gap-3">
-                            <div className={cn(
-                              'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all',
+                            <div className={cn('w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all',
                               modal.tipAprobare === 'fara_recuperare' ? 'border-blue-500 bg-blue-500' : 'border-slate-300'
                             )}>
                               {modal.tipAprobare === 'fara_recuperare' && <div className="w-2 h-2 rounded-full bg-white" />}
@@ -465,17 +458,14 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                             </div>
                           </div>
                         </button>
-
                         <button
                           onClick={() => setModal(prev => ({ ...prev, tipAprobare: 'cu_recuperare' }))}
-                          className={cn(
-                            'p-4 rounded-xl border-2 text-left transition-all',
+                          className={cn('p-4 rounded-xl border-2 text-left transition-all',
                             modal.tipAprobare === 'cu_recuperare' ? 'border-amber-500 bg-amber-50' : 'border-slate-200 bg-white hover:border-slate-300'
                           )}
                         >
                           <div className="flex items-center gap-3">
-                            <div className={cn(
-                              'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all',
+                            <div className={cn('w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all',
                               modal.tipAprobare === 'cu_recuperare' ? 'border-amber-500 bg-amber-500' : 'border-slate-300'
                             )}>
                               {modal.tipAprobare === 'cu_recuperare' && <div className="w-2 h-2 rounded-full bg-white" />}
@@ -552,7 +542,7 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
             </tr>
           </thead>
           <tbody>
-            {tableRows.map(({ date, pontaj, weekend, ziSaptamana }) => {
+            {tableRows.map(({ date, pontaj, weekend, ziSaptamana, exceptata }) => {
               if (weekend) {
                 return (
                   <tr key={date} className="border-b border-red-100 bg-red-50/60">
@@ -561,6 +551,17 @@ export default function TimesheetTable({ timesheets, readonly = false, from, to,
                     <td colSpan={6} className="px-4 py-2.5 text-red-300 text-xs">
                       {pontaj ? `Weekend — ${formatHours(Number(pontaj.hours_worked))} (neinclus in calcule)` : 'Weekend'}
                     </td>
+                    <td className="px-4 py-2.5" />
+                  </tr>
+                )
+              }
+
+              if (exceptata) {
+                return (
+                  <tr key={date} className="border-b border-purple-100 bg-purple-50/40">
+                    <td className="px-4 py-2.5 font-medium text-purple-400">{formatDate(date)}</td>
+                    <td className="px-4 py-2.5 text-purple-400 capitalize text-xs">{ziSaptamana}</td>
+                    <td colSpan={6} className="px-4 py-2.5 text-purple-300 text-xs">Zi exceptata (neinclusa in calcule)</td>
                     <td className="px-4 py-2.5" />
                   </tr>
                 )
