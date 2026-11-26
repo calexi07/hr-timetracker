@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { X, Shield, ArrowLeft } from 'lucide-react'
+import NoticeAdresaNoua from '@/components/NoticeAdresaNoua'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -64,6 +65,7 @@ export default function LoginPage() {
   }
 
   return (
+    <NoticeAdresaNoua>
     <div className="min-h-screen flex bg-slate-50">
       {/* Modal contact admin */}
       {showAdminModal && (
@@ -281,5 +283,6 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+    </NoticeAdresaNoua>
   )
 }
